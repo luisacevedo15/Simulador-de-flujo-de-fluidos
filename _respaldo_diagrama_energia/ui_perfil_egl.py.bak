@@ -1,0 +1,1027 @@
+"""Widget del perfil de la línea de energía (EGL) y de la línea hidráulica (HGL)."""
+
+from PyQt5 import QtGui
+from PyQt5.QtCore import QPointF, QRectF, QSize, Qt
+from PyQt5.QtGui import QBrush, QColor, QFont, QImage, QPainter, QPen, QPolygonF
+from PyQt5.QtWidgets import (
+    QFileDialog,
+    QHBoxLayout,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from ui.iconos import crear_icono_herramienta
+
+
+class WidgetPerfilEGLHGL(QWidget):
+    """Trazador de Línea de Energía (EGL) y Línea Piezométrica (HGL) estilo Google Stitch."""
+
+    COLORES_CAUSA = {
+        "friccion": "#0284c7",     # Azul: Fricción en tubería
+        "accesorio": "#f59e0b",    # Naranja: Accesorios (válvula, codo, reducción)
+        "entrada": "#64748b",      # Gris: Entrada al sistema
+        "salida": "#64748b",       # Gris: Salida / descarga
+        "deficit": "#dc2626",      # Rojo: Energía faltante
+        "bomba": "#16a34a",        # Verde: Salto de energía por bomba
+    }
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumHeight(340)
+        self.series = []
+        self.mostrar_valores = False
+        self.mostrar_hgl = True
+        self.mostrar_egl = True
+        self.resumen = {}
+        self.on_cambio_estado = None
+
+        # Botón Descargar imagen en esquina superior derecha de su recuadro
+        self.layout_top = QVBoxLayout(self)
+        self.layout_top.setContentsMargins(14, 8, 14, 0)
+        self.layout_top.setSpacing(0)
+
+        hdr_row = QHBoxLayout()
+        hdr_row.setContentsMargins(0, 0, 0, 0)
+        hdr_row.addStretch()
+
+        self.btn_exportar = QPushButton("Descargar imagen")
+        self.btn_exportar.setIcon(crear_icono_herramienta("descargar", "#006398"))
+        self.btn_exportar.setIconSize(QSize(13, 13))
+        self.btn_exportar.setCursor(Qt.PointingHandCursor)
+        self.btn_exportar.setToolTip("Exportar esta gráfica como imagen PNG de alta resolución")
+        self.btn_exportar.setStyleSheet(
+            "QPushButton { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 11px; "
+            "font-weight: 600; color: #006398; background: #e5eeff; border: 1px solid #cce0ff; "
+            "border-radius: 4px; padding: 4px 10px; }"
+            "QPushButton:hover { background: #d0e4ff; color: #0c4e77; }"
+            "QPushButton:pressed { background: #b8d7ff; }"
+        )
+        self.btn_exportar.clicked.connect(self.exportar_imagen)
+        self.btn_exportar.setVisible(False)
+        hdr_row.addWidget(self.btn_exportar)
+
+        self.layout_top.addLayout(hdr_row)
+        self.layout_top.addStretch(1)
+
+    def set_mostrar_valores(self, activo):
+        self.mostrar_valores = bool(activo)
+        self.update()
+
+    def set_mostrar_hgl(self, activo):
+        self.mostrar_hgl = bool(activo)
+        self.update()
+
+    def set_mostrar_egl(self, activo):
+        self.mostrar_egl = bool(activo)
+        self.update()
+
+    def _series_para_dibujar(self):
+        """Los modos de rótulos conservan exactamente las ordenadas del motor."""
+        return [s['puntos'] for s in self.series]
+
+    def _resumen_regimen(self):
+        """Calcula cotas de referencia y régimen energético (déficit/exceso/bomba) sin alterar las ordenadas."""
+        z1_raw = self.resumen.get("z1")
+        z2_raw = self.resumen.get("z2")
+        if z1_raw is not None and z2_raw is not None:
+            Z1 = float(z1_raw)
+            Z2 = float(z2_raw)
+        elif self.series and self.series[0].get("puntos"):
+            pts0 = self.series[0]["puntos"]
+            Z1 = float(pts0[0].get("egl", 0.0))
+            Z2 = float(pts0[-1].get("egl", 0.0))
+        else:
+            Z1 = 0.0
+            Z2 = 0.0
+
+        deficit = float(self.resumen.get("deficit", 0.0))
+        hf_total = float(self.resumen.get("hf_total", 0.0))
+        delta_z = Z1 - Z2
+
+        # Régimen de EXCESO (hf < ΔZ): se infiere del propio resumen, sin tocar motor ni resolver.
+        exc_resumen = float(self.resumen.get("excedente", 0.0) or 0.0)
+        dz_energia = hf_total + exc_resumen
+        tol_eq = max(0.05, 0.01 * abs(dz_energia))
+        pts_base = self.series[0]["puntos"] if self.series else []
+
+        has_bomba = (
+            any(
+                pt.get("causa") == "bomba" or pt.get("salto_bomba")
+                for s in self.series
+                for pt in s.get("puntos", [])
+            )
+            or ("H_op" in self.resumen)
+            or ("ALTURA BOMBA" in str(self.resumen.get("tit_exc", "")))
+        )
+
+        if has_bomba:
+            h_bomba_val = float(self.resumen.get("H_op", self.resumen.get("excedente", 0.0)))
+            if "energia_faltante" in self.resumen:
+                diff_energia = float(self.resumen["energia_faltante"])
+            else:
+                h_req = (Z2 - Z1) + hf_total
+                diff_energia = h_req - h_bomba_val
+
+            hay_deficit = diff_energia > 1e-3
+            hay_exceso = diff_energia < -1e-3
+            deficit = diff_energia if hay_deficit else 0.0
+            exc_resumen = (-diff_energia) if hay_exceso else 0.0
+        else:
+            hay_exceso = (
+                len(self.series) == 1
+                and len(pts_base) >= 2
+                and self.resumen.get("tit_exc", "ENERGÍA EXCEDENTE") == "ENERGÍA EXCEDENTE"
+                and deficit <= 0.05
+                and exc_resumen > tol_eq
+            )
+            hay_deficit = (not hay_exceso) and (deficit > 0.05 or hf_total > delta_z)
+
+        if hay_exceso:
+            nivel_t1 = float(pts_base[0].get("egl", Z1))
+            nivel_t2 = nivel_t1 - dz_energia
+        else:
+            nivel_t1 = Z1
+            nivel_t2 = Z2
+
+        return dict(
+            z1_raw=z1_raw,
+            z2_raw=z2_raw,
+            Z1=Z1,
+            Z2=Z2,
+            deficit=deficit,
+            hf_total=hf_total,
+            delta_z=delta_z,
+            exc_resumen=exc_resumen,
+            dz_energia=dz_energia,
+            has_bomba=has_bomba,
+            hay_deficit=hay_deficit,
+            hay_exceso=hay_exceso,
+            nivel_t1=nivel_t1,
+            nivel_t2=nivel_t2,
+        )
+
+    def elementos_leyenda(self):
+        """Devuelve solo los elementos visuales presentes en el perfil activo."""
+        if not self.series:
+            return []
+        reg = self._resumen_regimen()
+        puntos = [pt for s in self.series for pt in s.get("puntos", [])]
+        causas = {pt.get("causa") for pt in puntos if pt.get("causa")}
+        tipos = {pt.get("tipo_evento") for pt in puntos if pt.get("tipo_evento")}
+
+        items = []
+        if getattr(self, "mostrar_egl", True) and getattr(self, "mostrar_hgl", True):
+            items.append(("cinetica", "■", "v²/2g Cinética", "#0284c7", "#e0f2fe", "#bae6fd",
+                          "Carga de velocidad (área sombreada entre EGL y HGL)"))
+        if "friccion" in causas:
+            items.append(("friccion", "●", "Fricción", "#0284c7", "#f0f9ff", "#bae6fd",
+                          "Pérdidas continuas por fricción (Darcy-Weisbach)"))
+        if "accesorio" in causas:
+            items.append(("accesorio", "●", "Accesorios", "#b45309", "#fffbeb", "#fde68a",
+                          "Pérdidas localizadas en válvulas, codos y accesorios"))
+        if ("entrada" in tipos or "salida" in tipos or "entrada" in causas or "salida" in causas):
+            items.append(("entrada_salida", "●", "Entrada / Salida", "#475569", "#f8fafc", "#cbd5e1",
+                          "Conexiones de entrada y salida de depósitos"))
+        if reg["has_bomba"] or "bomba" in causas:
+            items.append(("bomba", "▲", "Bomba (+H)", "#15803d", "#f0fdf4", "#bbf7d0",
+                          "Energía aportada por la bomba al fluido"))
+        if reg["hay_deficit"]:
+            items.append(("deficit", "●", "Déficit", "#b91c1c", "#fef2f2", "#fecaca",
+                          "Energía faltante respecto a la cota de descarga"))
+        elif reg["hay_exceso"]:
+            items.append(("exceso", "●", "Excedente", "#15803d", "#f0fdf4", "#bbf7d0",
+                          "Energía disponible por encima de la cota de descarga"))
+        return items
+
+    @staticmethod
+    def _anotaciones_eventos(serie):
+        """Índice, evento original y texto: nunca deriva hf de las ordenadas."""
+        perfil = serie.get('perfil')
+        if perfil is None:
+            return []
+        anotaciones = []
+        for indice,evento in enumerate(perfil.puntos):
+            if not evento.etiqueta:
+                continue
+            if evento.tipo in ('salida','cambio de diámetro'):
+                texto = evento.etiqueta
+            elif evento.tipo == 'bomba':
+                texto = f'{evento.etiqueta} — H = +{evento.H_bomba:.2f} m'
+            else:
+                hf = evento.perdida
+                cantidad = ('hf < 0.01 m' if hf<0.01 else
+                            f'hf = {hf:.2e} m' if hf>=1e5 else f'hf = {hf:.2f} m')
+                texto = f'{evento.etiqueta} — {cantidad}'
+            anotaciones.append((indice,evento,texto))
+        return anotaciones
+
+    def limpiar_datos(self):
+        tenia = bool(self.series)
+        self.series = []
+        self.resumen = {}
+        self.setToolTip('')
+        if hasattr(self, "btn_exportar"):
+            self.btn_exportar.setVisible(False)
+        if tenia:
+            self.update()
+        if callable(self.on_cambio_estado):
+            self.on_cambio_estado(False)
+
+    def actualizar_datos(self, series, resumen=None):
+        self.series = [s for s in (series or []) if s.get("puntos")]
+        self.setToolTip('\n'.join(f"{s.get('nombre','Ruta')}: {s.get('mensaje',s['estado'])}"
+            for s in self.series if s.get('estado','OK')!='OK'))
+        if hasattr(self, "btn_exportar"):
+            self.btn_exportar.setVisible(bool(self.series))
+        if resumen is not None:
+            self.resumen = dict(resumen)
+        elif self.series and self.series[0].get('perfil') is not None:
+            perfil = self.series[0]['perfil']
+            self.resumen = dict(z1=perfil.H_inicio,z2=perfil.H_final,
+                hf_total=perfil.hf_distribuida+perfil.hf_localizada,deficit=0.0,
+                excedente=perfil.H_bombas)
+        self.update()
+        if callable(self.on_cambio_estado):
+            self.on_cambio_estado(bool(self.series))
+
+    def actualizar_perfil(self, perfil, *args, **kwargs):
+        """Acepta únicamente un perfil calculado: no estima velocidades ni pérdidas."""
+        from motor.resultados import PerfilRuta
+        from motor.perfiles import perfil_como_serie
+        if not isinstance(perfil,PerfilRuta):
+            raise ValueError('Se requiere PerfilRuta calculado; los valores agregados no definen un perfil.')
+        self.actualizar_datos([perfil_como_serie(perfil)])
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        r = QRectF(self.rect()).adjusted(4, 4, -4, -4)
+        self._dibujar_perfil(p, r, para_exportar=False)
+        p.end()
+
+    def _dibujar_perfil(self, p, r, para_exportar=False):
+        if para_exportar:
+            # Fondo blanco sólido para informes / Word / PowerPoint
+            p.fillRect(r, QColor("#ffffff"))
+            p.setPen(QPen(QColor("#cbd5e1"), 1.0))
+            p.setBrush(QColor("#ffffff"))
+            p.drawRoundedRect(r, 6, 6)
+        else:
+            # Contenedor interior estilo Stitch (surface-bright #f8f9ff con borde #e5eeff)
+            p.setPen(QPen(QColor("#e5eeff"), 1.2))
+            p.setBrush(QColor("#f8f9ff"))
+            p.drawRoundedRect(r, 10, 10)
+
+        if not self.series:
+            font_empty = QFont("Inter", 10)
+            font_empty.setWeight(QFont.DemiBold)
+            p.setFont(font_empty)
+            p.setPen(QColor("#72787f"))
+            p.drawText(
+                r,
+                Qt.AlignCenter,
+                "Gráfico EGL / HGL no generado",
+            )
+            return
+
+        left_pad = 104.0
+        right_pad = 58.0
+        top_pad = 72.0 if para_exportar else 42.0
+        bot_pad = 72.0
+        plot = QRectF(
+            r.left() + left_pad,
+            r.top() + top_pad,
+            max(160.0, r.width() - left_pad - right_pad),
+            max(120.0, r.height() - top_pad - bot_pad),
+        )
+
+        # Fondo y cuadrícula técnica milimetrada estilo Stitch
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor("#f8f9ff"))
+        p.drawRoundedRect(plot, 4, 4)
+
+        pen_grid_minor = QPen(QColor(220, 233, 255, 130), 0.7, Qt.SolidLine)
+        p.setPen(pen_grid_minor)
+        gx = plot.left() + 25.0
+        while gx < plot.right():
+            p.drawLine(QPointF(gx, plot.top()), QPointF(gx, plot.bottom()))
+            gx += 25.0
+        gy = plot.top() + 20.0
+        while gy < plot.bottom():
+            p.drawLine(QPointF(plot.left(), gy), QPointF(plot.right(), gy))
+            gy += 20.0
+
+        # Rango horizontal
+        todos_x = [float(pt.get("x", 0.0)) for s in self.series for pt in s["puntos"]]
+        x_min = min(todos_x) if todos_x else 0.0
+        x_max = max(todos_x) if todos_x else 100.0
+        if x_max - x_min < 1e-6:
+            x_max = x_min + 100.0
+
+        # 4.2 Escala anclada a los tanques
+        reg = self._resumen_regimen()
+        z1_raw = reg["z1_raw"]
+        z2_raw = reg["z2_raw"]
+        Z1 = reg["Z1"]
+        Z2 = reg["Z2"]
+        deficit = reg["deficit"]
+        hf_total = reg["hf_total"]
+        delta_z = reg["delta_z"]
+        exc_resumen = reg["exc_resumen"]
+        dz_energia = reg["dz_energia"]
+        has_bomba = reg["has_bomba"]
+        hay_deficit = reg["hay_deficit"]
+        hay_exceso = reg["hay_exceso"]
+        nivel_t1 = reg["nivel_t1"]
+        nivel_t2 = reg["nivel_t2"]
+
+        todos_egl_vals = [float(pt.get("egl", 0.0)) for s in self.series for pt in s.get("puntos", [])]
+        todos_hgl_vals = [float(pt.get("hgl", 0.0)) for s in self.series for pt in s.get("puntos", [])]
+        todos_y_vals = [nivel_t1, nivel_t2] + todos_egl_vals + todos_hgl_vals
+        val_max_y = max(todos_y_vals) if todos_y_vals else max(nivel_t1, nivel_t2)
+        val_min_y = min(todos_y_vals) if todos_y_vals else min(nivel_t1, nivel_t2)
+        span_y = max(val_max_y - val_min_y, 1.0)
+
+        if has_bomba:
+            y_top = val_max_y + 0.15 * span_y
+            y_bot = val_min_y - 0.15 * span_y
+        else:
+            delta_z_ref = max(abs(nivel_t1 - nivel_t2), 1.0)
+            y_top = max(nivel_t1, nivel_t2) + 0.15 * delta_z_ref
+            if hay_deficit:
+                y_bot = min(nivel_t1, nivel_t2) - 0.45 * delta_z_ref
+            else:
+                y_bot = min(nivel_t1, nivel_t2) - 0.12 * delta_z_ref
+
+        if y_top - y_bot < 1e-6:
+            y_top = y_bot + 10.0
+
+        def map_x(xv):
+            return plot.left() + ((xv - x_min) / (x_max - x_min)) * plot.width()
+
+        def map_y(yv):
+            return plot.bottom() - ((yv - y_bot) / (y_top - y_bot)) * plot.height()
+
+        series_dib = self._series_para_dibujar()
+        x_corte_didactico = None
+
+        # Títulos de ejes estilo Stitch
+        font_axis_title = QFont("Inter", 9)
+        font_axis_title.setBold(True)
+        p.setFont(font_axis_title)
+        p.setPen(QColor("#0c4e77"))
+        if para_exportar:
+            font_main_tit = QFont("Inter", 12, QFont.Bold)
+            p.setFont(font_main_tit)
+            p.setPen(QColor("#0c4e77"))
+            p.drawText(
+                QRectF(r.left() + 20, r.top() + 12, 380, 24),
+                Qt.AlignLeft | Qt.AlignVCenter,
+                "Líneas de Energía (EGL / HGL)",
+            )
+            font_sub = QFont("Inter", 8)
+            p.setFont(font_sub)
+            p.setPen(QColor("#64748b"))
+            p.drawText(
+                QRectF(r.left() + 20, r.top() + 36, 440, 16),
+                Qt.AlignLeft | Qt.AlignVCenter,
+                "Perfil hidráulico longitudinal de energía total y cota piezométrica",
+            )
+            self._dibujar_leyenda_perfil(p, r, hay_deficit, hay_exceso)
+
+            p.setFont(font_axis_title)
+            p.setPen(QColor("#0c4e77"))
+            p.drawText(
+                QRectF(r.left() + 18, plot.top() - 20, left_pad + 80, 18),
+                Qt.AlignLeft | Qt.AlignVCenter,
+                "Altura / Cota Hidráulica [m]",
+            )
+        else:
+            p.drawText(
+                QRectF(r.left() + 18, r.top() + 10, 260, 20),
+                Qt.AlignLeft | Qt.AlignVCenter,
+                "Altura / Cota Hidráulica [m]",
+            )
+
+        p.setFont(font_axis_title)
+        p.setPen(QColor("#0c4e77"))
+        p.drawText(
+            QRectF(plot.right() - 280, plot.bottom() + 46, 280, 18),
+            Qt.AlignRight | Qt.AlignVCenter,
+            "Estaciones del Sistema Hidráulico",
+        )
+
+        # 1. Líneas horizontales de cota + Plano de Referencia (Datum)
+        pen_grid_h = QPen(QColor("#cbdbf5"), 1.0, Qt.DashLine)
+        font_axis = QFont("Consolas", 8)
+        n_lineas_y = 4
+        ys_dibujadas = []
+        for idx_y in range(n_lineas_y + 1):
+            frac = idx_y / n_lineas_y
+            val_y = y_top - frac * (y_top - y_bot)
+            y_px = plot.top() + frac * plot.height()
+            es_datum = abs(val_y) < 0.08 or (idx_y == n_lineas_y and not hay_deficit)
+            p.setPen(QPen(QColor("#72787f"), 1.4, Qt.DashLine) if es_datum else pen_grid_h)
+            p.drawLine(QPointF(plot.left() - 4, y_px), QPointF(plot.right(), y_px))
+
+            if (self.mostrar_valores or es_datum) and not (
+                x_corte_didactico is not None and val_y < -0.05
+            ):
+                p.setFont(font_axis)
+                p.setPen(QColor("#72787f") if es_datum else QColor("#41474e"))
+                if es_datum and abs(val_y) < 0.15:
+                    etiqueta_cota = "0.0 m (Datum)"
+                elif es_datum:
+                    etiqueta_cota = f"{val_y:.1f} m" if self.mostrar_valores else "Datum (Ref.)"
+                else:
+                    etiqueta_cota = f"{val_y:.1f} m"
+                p.drawText(
+                    QRectF(r.left() + 4, y_px - 8, left_pad - 12, 16),
+                    Qt.AlignRight | Qt.AlignVCenter,
+                    etiqueta_cota,
+                )
+                ys_dibujadas.append(y_px)
+
+        # Cotas z₁ y z₂ en el eje vertical cuando Mostrar valores está activo
+        if self.mostrar_valores:
+            font_z_axis = QFont("Consolas", 8)
+            font_z_axis.setBold(True)
+            p.setFont(font_z_axis)
+            for z_val, suf_z, col_z in (
+                (Z1, "z₁", "#0c4e77"),
+                (Z2, "z₂", "#006398"),
+            ):
+                yz = map_y(float(z_val))
+                if plot.top() - 2 <= yz <= plot.bottom() + 2:
+                    p.setPen(QPen(QColor(col_z), 1.2, Qt.DashLine))
+                    p.drawLine(QPointF(plot.left() - 4, yz), QPointF(plot.right(), yz))
+                    y_txt = yz
+                    for y_prev in ys_dibujadas:
+                        if abs(y_txt - y_prev) < 12:
+                            y_txt = y_prev - 12 if y_txt <= y_prev else y_prev + 12
+                    ys_dibujadas.append(y_txt)
+                    p.setPen(QColor(col_z))
+                    p.drawText(
+                        QRectF(r.left() + 2, y_txt - 8, left_pad - 10, 16),
+                        Qt.AlignRight | Qt.AlignVCenter,
+                        f"{float(z_val):.1f} m ({suf_z})",
+                    )
+
+        # 4.3 Déficit de energía (cuando las pérdidas superan el desnivel disponible)
+        pts_prim = series_dib[0] if series_dib else []
+        x_cruce_def_px = None
+        x_corte_px = None
+
+        if hay_deficit and not has_bomba:
+            y_t2_px = map_y(Z2)
+            # Línea horizontal punteada fina en el nivel del Tanque 2, rotulada "Nivel Tanque 2"
+            p.setPen(QPen(QColor("#94a3b8"), 1.2, Qt.DashLine))
+            p.drawLine(QPointF(plot.left(), y_t2_px), QPointF(plot.right(), y_t2_px))
+
+            p.setFont(QFont("Inter", 8, QFont.Bold))
+            p.setPen(QColor("#64748b"))
+            p.drawText(
+                QRectF(plot.left() + 8, max(plot.top() + 2, y_t2_px - 16), 140, 14),
+                Qt.AlignLeft | Qt.AlignVCenter,
+                "Nivel Tanque 2",
+            )
+
+            # Buscar cruce donde la EGL cae por debajo de Z2
+            x_cruce = None
+            for i in range(len(pts_prim) - 1):
+                e1 = float(pts_prim[i].get("egl", 0.0))
+                e2 = float(pts_prim[i + 1].get("egl", 0.0))
+                x1 = float(pts_prim[i].get("x", 0.0))
+                x2 = float(pts_prim[i + 1].get("x", 0.0))
+                if e1 >= Z2 and e2 < Z2:
+                    frac = (e1 - Z2) / (e1 - e2) if abs(e2 - e1) > 1e-9 else 0.0
+                    x_cruce = x1 + frac * (x2 - x1)
+                    break
+                elif e1 < Z2 and e2 < Z2 and x_cruce is None:
+                    x_cruce = x1
+                    break
+
+            if x_cruce is None and pts_prim and float(pts_prim[0].get("egl", 0.0)) < Z2:
+                x_cruce = float(pts_prim[0].get("x", 0.0))
+
+            if x_cruce is not None and getattr(self, "mostrar_egl", True):
+                x_cruce_def_px = max(plot.left(), map_x(x_cruce))
+                h_som = plot.bottom() - y_t2_px
+                w_som = plot.right() - x_cruce_def_px
+                if h_som > 1.0 and w_som > 1.0:
+                    p.fillRect(QRectF(x_cruce_def_px, y_t2_px, w_som, h_som), QColor(239, 68, 68, 38))
+
+            # Buscar corte donde la EGL sale por el borde inferior (y_bot)
+            for i in range(len(pts_prim) - 1):
+                e1 = float(pts_prim[i].get("egl", 0.0))
+                e2 = float(pts_prim[i + 1].get("egl", 0.0))
+                x1 = float(pts_prim[i].get("x", 0.0))
+                x2 = float(pts_prim[i + 1].get("x", 0.0))
+                if e1 >= y_bot and e2 < y_bot:
+                    frac = (e1 - y_bot) / (e1 - e2) if abs(e2 - e1) > 1e-9 else 0.0
+                    x_corte = x1 + frac * (x2 - x1)
+                    x_corte_px = map_x(x_corte)
+                    break
+            if x_corte_didactico is not None:
+                x_corte_px = map_x(x_corte_didactico)
+
+        # 4.3b Exceso de energía (hf < ΔZ): nivel del Tanque 2 + banda verde entre la EGL y ese nivel
+        info_exceso = None
+        if hay_exceso and not has_bomba:
+            pts_e = series_dib[0]
+            y_t2_px = map_y(nivel_t2)
+            p.setPen(QPen(QColor("#94a3b8"), 1.2, Qt.DashLine))
+            p.drawLine(QPointF(plot.left(), y_t2_px), QPointF(plot.right(), y_t2_px))
+
+            if getattr(self, "mostrar_egl", True):
+                i_ent = next((i for i, pt in enumerate(pts_e) if pt.get("etiqueta") == "Entrada"), 0)
+                i_sal_e = next(
+                    (i for i, pt in enumerate(pts_e) if pt.get("causa") == "salida"), len(pts_e) - 1
+                )
+                if i_sal_e <= i_ent:
+                    i_ent, i_sal_e = 0, len(pts_e) - 1
+                tramo_e = pts_e[i_ent:i_sal_e + 1]
+
+                borde_sup = [
+                    QPointF(map_x(float(pt["x"])), map_y(max(float(pt["egl"]), nivel_t2)))
+                    for pt in tramo_e
+                ]
+                x_a = borde_sup[0].x()
+                x_b = borde_sup[-1].x()
+                poligono_exc = QPolygonF(borde_sup + [QPointF(x_b, y_t2_px), QPointF(x_a, y_t2_px)])
+                p.save()
+                p.setClipRect(plot)
+                p.setPen(Qt.NoPen)
+                p.setBrush(QColor(22, 163, 74, 46))      # #16a34a con baja opacidad
+                p.drawPolygon(poligono_exc)
+                p.restore()
+
+                # EGL (px) en el centro de la banda, para ubicar el rótulo dentro de ella
+                x_c_exc = (x_a + x_b) / 2.0
+                y_egl_c = borde_sup[-1].y()
+                for k in range(len(borde_sup) - 1):
+                    xa_k, xb_k = borde_sup[k].x(), borde_sup[k + 1].x()
+                    if xb_k - xa_k > 1e-9 and xa_k <= x_c_exc <= xb_k:
+                        y_egl_c = borde_sup[k].y() + (borde_sup[k + 1].y() - borde_sup[k].y()) * (
+                            (x_c_exc - xa_k) / (xb_k - xa_k)
+                        )
+                        break
+                info_exceso = {"x_c": x_c_exc, "y_egl_c": y_egl_c, "y_t2": y_t2_px}
+
+        # Ejes principales (izquierdo y base) como en Stitch (#213145)
+        pen_axes = QPen(QColor("#213145"), 2.0)
+        p.setPen(pen_axes)
+        p.drawLine(QPointF(plot.left(), plot.top()), QPointF(plot.left(), plot.bottom()))
+        p.drawLine(QPointF(plot.left(), plot.bottom()), QPointF(plot.right(), plot.bottom()))
+
+        # 2. Estaciones en el eje horizontal (Tanque 1, Entrada, bifurcación, reunión, válvula, Tanque 2)
+        estaciones_candidatas = []
+        for s in self.series:
+            for pt in s["puntos"]:
+                etq = pt.get("etiqueta", "")
+                sub_etq = pt.get("sub_etiqueta", "")
+                if etq:
+                    estaciones_candidatas.append(
+                        (map_x(float(pt.get("x", 0.0))), etq, sub_etq)
+                    )
+
+        estaciones_filtradas = []
+        for x_px, etq, sub_etq in estaciones_candidatas:
+            if not any(abs(x_px - ex) < 68.0 for ex, _, _ in estaciones_filtradas):
+                estaciones_filtradas.append((x_px, etq, sub_etq))
+            elif (
+                estaciones_filtradas
+                and etq != estaciones_filtradas[-1][1]
+                and x_px > estaciones_filtradas[-1][0] + 24.0
+            ):
+                estaciones_filtradas[-1] = (x_px, etq, sub_etq)
+
+        font_est = QFont("Inter", 8)
+        font_est.setBold(True)
+        font_sub_est = QFont("Inter", 7)
+        fm_est = QtGui.QFontMetrics(font_est)
+        fm_sub = QtGui.QFontMetrics(font_sub_est)
+        pen_est_line = QPen(QColor("#cbdbf5"), 1.0, Qt.SolidLine)
+        self._estaciones_rects = []
+        for x_px, etq, sub_etq in estaciones_filtradas:
+            p.setPen(pen_est_line)
+            p.drawLine(QPointF(x_px, plot.top()), QPointF(x_px, plot.bottom()))
+            w_etq = float(fm_est.horizontalAdvance(str(etq)))
+            w_sub = float(fm_sub.horizontalAdvance(str(sub_etq))) if sub_etq else 0.0
+            ancho_caja = max(144.0, w_etq + 28.0, w_sub + 28.0)
+            margen_lat = 10.0
+            x_caja = max(
+                r.left() + margen_lat,
+                min(r.right() - ancho_caja - margen_lat, x_px - ancho_caja / 2.0),
+            )
+            rect_etq = QRectF(x_caja, plot.bottom() + 6.0, ancho_caja, 18.0)
+            self._estaciones_rects.append((etq, rect_etq))
+            p.setFont(font_est)
+            p.setPen(QColor("#41474e"))
+            p.drawText(
+                rect_etq,
+                Qt.AlignHCenter | Qt.AlignVCenter,
+                etq,
+            )
+            if sub_etq:
+                p.setFont(font_sub_est)
+                p.setPen(QColor("#72787f"))
+                p.drawText(
+                    QRectF(x_caja, plot.bottom() + 24.0, ancho_caja, 16.0),
+                    Qt.AlignHCenter | Qt.AlignVCenter,
+                    sub_etq,
+                )
+
+        # 3. Trazado por serie (recortado al área de dibujo con pendiente real)
+        chips_dibujados = []
+        for idx_s, s in enumerate(self.series):
+            pts = series_dib[idx_s]
+            if len(pts) < 2:
+                continue
+            pts_egl = [QPointF(map_x(float(pt["x"])), map_y(float(pt["egl"]))) for pt in pts]
+            pts_hgl = [QPointF(map_x(float(pt["x"])), map_y(float(pt["hgl"]))) for pt in pts]
+
+            p.save()
+            p.setClipRect(plot)
+
+            # Área entre EGL y HGL en celeste traslúcido (carga cinética v²/2g)
+            if getattr(self, "mostrar_egl", True) and getattr(self, "mostrar_hgl", True):
+                poly_area = QPolygonF(pts_egl + list(reversed(pts_hgl)))
+                grad_area = QtGui.QLinearGradient(0, plot.top(), 0, plot.bottom())
+                grad_area.setColorAt(0.0, QColor(56, 189, 248, 88))
+                grad_area.setColorAt(1.0, QColor(56, 189, 248, 38))
+                p.setPen(Qt.NoPen)
+                p.setBrush(QBrush(grad_area))
+                p.drawPolygon(poly_area)
+
+            # 1. Línea Piezométrica (HGL): azul (#2980b9), grosor 2.8
+            if getattr(self, "mostrar_hgl", True):
+                pen_hgl = QPen(QColor("#2980b9"), 2.8, Qt.DashLine)
+                pen_hgl.setCapStyle(Qt.RoundCap)
+                pen_hgl.setJoinStyle(Qt.RoundJoin)
+                p.setPen(pen_hgl)
+                p.setBrush(Qt.NoBrush)
+                p.drawPolyline(QPolygonF(pts_hgl))
+
+            # 2. Línea de Energía con velocidad (EGL): rojo (#e74c3c), grosor 2.8, va sobre la piezométrica
+            if getattr(self, "mostrar_egl", True):
+                pen_egl = QPen(QColor("#e74c3c"), 2.8, Qt.SolidLine)
+                pen_egl.setCapStyle(Qt.RoundCap)
+                pen_egl.setJoinStyle(Qt.RoundJoin)
+                p.setPen(pen_egl)
+                p.setBrush(Qt.NoBrush)
+                p.drawPolyline(QPolygonF(pts_egl))
+
+                # Salto vertical de bomba y marcas singulares en EGL
+                for idx_pt in range(1, len(pts)):
+                    pt_curr = pts[idx_pt]
+                    causa = pt_curr.get("causa")
+                    hf_tr = pt_curr.get("hf_tramo")
+                    p1 = pts_egl[idx_pt - 1]
+                    p2 = pts_egl[idx_pt]
+
+                    if causa == "bomba":
+                        pen_bomba = QPen(QColor("#16a34a"), 3.4, Qt.SolidLine)
+                        pen_bomba.setCapStyle(Qt.RoundCap)
+                        p.setPen(pen_bomba)
+                        p.drawLine(p1, p2)
+
+                        tam_flecha = 7.5
+                        punta = p2
+                        poly_flecha = QPolygonF([
+                            punta,
+                            QPointF(punta.x() - tam_flecha * 0.55, punta.y() + tam_flecha),
+                            QPointF(punta.x() + tam_flecha * 0.55, punta.y() + tam_flecha),
+                        ])
+                        p.setPen(Qt.NoPen)
+                        p.setBrush(QColor("#16a34a"))
+                        p.drawPolygon(poly_flecha)
+                    elif causa == "accesorio" and hf_tr is not None and hf_tr > 1e-6:
+                        alt_px = abs(p2.y() - p1.y())
+                        if alt_px < 10.0:
+                            cy_acc = (p1.y() + p2.y()) / 2.0
+                            y1_acc = cy_acc - 5.0
+                            y2_acc = cy_acc + 5.0
+                        else:
+                            y1_acc = min(p1.y(), p2.y())
+                            y2_acc = max(p1.y(), p2.y())
+
+                        pen_acc = QPen(QColor("#f59e0b"), 3.4, Qt.SolidLine)
+                        pen_acc.setCapStyle(Qt.RoundCap)
+                        p.setPen(pen_acc)
+                        p.drawLine(QPointF(p2.x(), y1_acc), QPointF(p2.x(), y2_acc))
+
+                        p.setPen(QPen(QColor("#ffffff"), 1.6))
+                        p.setBrush(QColor("#f59e0b"))
+                        p.drawEllipse(QPointF(p2.x(), (y1_acc + y2_acc) / 2.0), 4.5, 4.5)
+
+            p.restore()
+
+            if getattr(self, "mostrar_egl", True):
+                # Una anotación por evento etiquetado; solo formato, sin sumar
+                # pérdidas, deduplicar nombres ni usar totales del resumen.
+                for idx_pt,evento,texto_chip in self._anotaciones_eventos(s):
+                    # La llegada ya se rotula en la estación final del eje.
+                    if evento.tipo == 'salida':
+                        continue
+                    pt_curr = pts[idx_pt]
+                    p1 = pts_egl[max(0,idx_pt-1)]
+                    p2 = pts_egl[idx_pt]
+                    causa = evento.tipo if evento.tipo in ('entrada','salida') else pt_curr.get('causa')
+                    col_seg = QColor(self.COLORES_CAUSA.get(causa,'#0284c7'))
+                    if idx_s == 0:
+                        font_chip = QFont("Inter", 7)
+                        font_chip.setBold(True)
+                        fm_chip = QtGui.QFontMetrics(font_chip)
+                        w_chip = max(64.0, fm_chip.horizontalAdvance(texto_chip) + 14.0)
+                        h_chip = 18.0
+
+                        cx = (p1.x() + p2.x()) / 2.0
+                        cy = min(plot.bottom() - 10.0, max(plot.top() + 10.0, (p1.y() + p2.y()) / 2.0))
+                        if causa == "bomba":
+                            cx = min(plot.right() - w_chip - 6.0, p2.x() + w_chip / 2.0 + 8.0)
+                            offset_y = 0.0
+                        else:
+                            offset_y = -16.0 if causa == "friccion" else (14.0 if causa in ("entrada", "salida") else -24.0)
+                        rect_chip = QRectF(
+                            max(plot.left() + 4.0, min(plot.right() - w_chip - 4.0, cx - w_chip / 2.0)),
+                            max(plot.top() + 4.0, min(plot.bottom() - h_chip - 4.0, cy + offset_y - h_chip / 2.0)),
+                            w_chip,
+                            h_chip,
+                        )
+                        if (
+                            causa == "salida"
+                            and x_corte_px is not None
+                            and abs(rect_chip.center().x() - x_corte_px) < w_chip / 2.0 + 10.0
+                        ):
+                            rect_chip.moveLeft(min(plot.right() - w_chip - 4.0, x_corte_px + 12.0))
+                        intentos = 0
+                        while any(rect_chip.intersects(c_prev.adjusted(-3, -2, 3, 2)) for c_prev in chips_dibujados) and intentos < 5:
+                            dy_shift = -20.0 if intentos % 2 == 0 else 22.0
+                            nueva_y = max(plot.top() + 3.0, min(plot.bottom() - h_chip - 3.0, rect_chip.top() + dy_shift))
+                            rect_chip.moveTop(nueva_y)
+                            intentos += 1
+
+                        if not any(rect_chip.intersects(c_prev) for c_prev in chips_dibujados):
+                            chips_dibujados.append(rect_chip)
+                            p.setPen(QPen(col_seg, 0.9, Qt.DotLine))
+                            p.drawLine(QPointF(rect_chip.center().x(), rect_chip.bottom() if rect_chip.center().y() < cy else rect_chip.top()), QPointF(cx, cy))
+
+                            bg_chip = QColor("#ffffff")
+                            bg_chip.setAlpha(245)
+                            p.setPen(QPen(col_seg, 1.1))
+                            p.setBrush(bg_chip)
+                            p.drawRoundedRect(rect_chip, 4.0, 4.0)
+
+                            p.setFont(font_chip)
+                            p.setPen(col_seg.darker(115) if causa == "accesorio" else col_seg)
+                            p.drawText(rect_chip, Qt.AlignCenter, texto_chip)
+
+                # Marcadores circulares
+                for idx_pt, (pt_info, pt_px) in enumerate(zip(pts, pts_egl)):
+                    causa_pt = pt_info.get("causa")
+                    col_pto = QColor(self.COLORES_CAUSA.get(causa_pt, "#0c4e77")) if causa_pt else QColor("#0c4e77")
+                    if pt_info.get("etiqueta") or causa_pt == "accesorio" or idx_pt in (0, len(pts) - 1):
+                        if plot.top() - 4 <= pt_px.y() <= plot.bottom() + 4 and plot.left() - 4 <= pt_px.x() <= plot.right() + 4:
+                            p.setPen(QPen(QColor("#ffffff"), 1.6))
+                            p.setBrush(col_pto)
+                            p.drawEllipse(pt_px, 4.0, 4.0)
+
+                # Marca de corte "//" cuando la línea sale por el borde inferior (4.3); se dibuja
+                # al final para que ningún rótulo la tape
+                if x_corte_px is not None and plot.left() <= x_corte_px <= plot.right():
+                    pen_corte = QPen(QColor("#dc2626"), 2.4)
+                    pen_corte.setCapStyle(Qt.RoundCap)
+                    p.setPen(pen_corte)
+                    p.setBrush(Qt.NoBrush)
+                    cy_c = plot.bottom()
+                    p.drawLine(QPointF(x_corte_px - 5, cy_c - 9), QPointF(x_corte_px + 1, cy_c + 9))
+                    p.drawLine(QPointF(x_corte_px + 1, cy_c - 9), QPointF(x_corte_px + 7, cy_c + 9))
+
+        # Rótulo de Energía faltante / déficit (4.3)
+        if hay_deficit and getattr(self, "mostrar_egl", True):
+            val_hw = deficit if deficit > 0 else max(0.0, hf_total - delta_z)
+            if val_hw >= 1e5:
+                hw_str = f"{val_hw:.2e}"
+            else:
+                hw_str = f"{val_hw:.2f}"
+            if has_bomba:
+                txt_rotulo_deficit = f"Energía faltante = {hw_str} m"
+            else:
+                txt_rotulo_deficit = f"Energía faltante = h_W = {hw_str} m (se requiere bomba)"
+
+            font_hw = QFont("Inter", 8)
+            font_hw.setBold(True)
+            p.setFont(font_hw)
+            fm_hw = QtGui.QFontMetrics(font_hw)
+            w_box_hw = fm_hw.horizontalAdvance(txt_rotulo_deficit) + 16.0
+            h_box_hw = 22.0
+
+            cx_box = (x_cruce_def_px + plot.right()) / 2.0 if x_cruce_def_px is not None else (plot.left() + plot.right()) / 2.0
+            y_t2_px = map_y(Z2)
+            cy_box = (y_t2_px + plot.bottom()) / 2.0
+            bx = max(plot.left() + 6.0, min(plot.right() - w_box_hw - 6.0, cx_box - w_box_hw / 2.0))
+            by = max(y_t2_px + 4.0, min(plot.bottom() - h_box_hw - 4.0, cy_box - h_box_hw / 2.0))
+            rect_hw = QRectF(bx, by, w_box_hw, h_box_hw)
+
+            p.setPen(QPen(QColor("#dc2626"), 1.2))
+            p.setBrush(QColor(254, 242, 242, 240))
+            p.drawRoundedRect(rect_hw, 4.0, 4.0)
+
+            p.setPen(QColor("#b91c1c"))
+            p.drawText(rect_hw, Qt.AlignCenter, txt_rotulo_deficit)
+
+        # 4. Callouts de Nivel Inicial (z₁) y Nivel Final (z₂) cuando Mostrar valores está activo
+        if self.mostrar_valores and self.series:
+            pts0 = self.series[0]["puntos"]
+            if len(pts0) >= 2:
+                p_ini = QPointF(map_x(float(pts0[0]["x"])), map_y(float(pts0[0]["egl"])))
+                p_fin = QPointF(map_x(float(pts0[-1]["x"])), map_y(float(pts0[-1]["egl"])))
+                z1_num = float(z1_raw if z1_raw is not None else pts0[0]["egl"])
+                z2_num = float(z2_raw if z2_raw is not None else pts0[-1]["egl"])
+
+                font_call = QFont("Consolas", 8)
+                font_call.setBold(True)
+                p.setFont(font_call)
+                for pt_ref, txt_call, align_right in (
+                    (p_ini, f"z₁ = {z1_num:.2f} m (Nivel Inicial)", False),
+                    (p_fin, f"z₂ = {z2_num:.2f} m (Nivel Final)", True),
+                ):
+                    w_box = QtGui.QFontMetrics(font_call).horizontalAdvance(txt_call) + 16.0
+                    h_box = 22.0
+                    bx = pt_ref.x() - w_box - 6.0 if align_right else pt_ref.x() + 6.0
+                    bx = max(plot.left() + 6.0, min(plot.right() - w_box - 6.0, bx))
+                    by = max(r.top() + 8.0, min(plot.bottom() - h_box - 4.0, pt_ref.y() - 32.0))
+                    box_r = QRectF(bx, by, w_box, h_box)
+                    if not any(box_r.intersects(ch) for ch in chips_dibujados):
+                        chips_dibujados.append(box_r)
+                        p.setPen(Qt.NoPen)
+                        p.setBrush(QColor("#213145"))
+                        p.drawRoundedRect(box_r, 4.0, 4.0)
+                        p.setPen(QColor("#ffffff"))
+                        p.drawText(box_r, Qt.AlignCenter, txt_call)
+
+        # 5. Rótulos del régimen de exceso (al final, para que nada los tape)
+        if hay_exceso and info_exceso is not None and getattr(self, "mostrar_egl", True):
+            y_t2_px = info_exceso["y_t2"]
+            zona_ocupada = [c.adjusted(-3, -2, 3, 2) for c in chips_dibujados]
+
+            # 5a. Rótulo "Nivel Tanque 2 (x.xx m)" pegado al borde derecho, por encima de la línea
+            txt_t2 = f"Nivel Tanque 2 ({nivel_t2:.2f} m)"
+            font_t2 = QFont("Inter", 8, QFont.Bold)
+            w_t2 = QtGui.QFontMetrics(font_t2).horizontalAdvance(txt_t2) + 6.0
+            rect_t2 = QRectF(plot.right() - w_t2 - 8.0, y_t2_px - 16.0, w_t2, 14.0)
+            for dy_t2 in (-16.0, -34.0, -52.0, -70.0):
+                cand_t2 = QRectF(plot.right() - w_t2 - 8.0, y_t2_px + dy_t2, w_t2, 14.0)
+                if cand_t2.top() >= plot.top() + 2.0 and not any(cand_t2.intersects(z) for z in zona_ocupada):
+                    rect_t2 = cand_t2
+                    break
+
+            # 5b. Rótulo dentro de la banda verde
+            exc_val = max(0.0, dz_energia - hf_total)
+            txt_exc = f"Energía excedente = {exc_val:.2f} m (el caudal podría ser mayor)"
+            font_exc = QFont("Inter", 8)
+            font_exc.setBold(True)
+            w_exc = QtGui.QFontMetrics(font_exc).horizontalAdvance(txt_exc) + 16.0
+            h_exc = 22.0
+            y_ega = info_exceso["y_egl_c"]
+            alto_banda = y_t2_px - y_ega
+            if alto_banda >= h_exc + 8.0:
+                cy_exc = (y_ega + y_t2_px) / 2.0
+                top_exc = cy_exc - h_exc / 2.0
+            else:
+                top_exc = y_t2_px + 6.0           # banda muy delgada: justo bajo el nivel de Z2
+            bx_exc = max(plot.left() + 6.0, min(plot.right() - w_exc - 6.0, info_exceso["x_c"] - w_exc / 2.0))
+            rect_exc = QRectF(bx_exc, top_exc, w_exc, h_exc)
+            for dy_exc in (0.0, 26.0, -26.0, 52.0, -52.0):
+                cand = QRectF(bx_exc, top_exc + dy_exc, w_exc, h_exc)
+                dentro = plot.top() + 3.0 <= cand.top() and cand.bottom() <= plot.bottom() - 3.0
+                if alto_banda >= h_exc + 8.0:
+                    dentro = dentro and (cand.top() >= y_ega + 2.0) and (cand.bottom() <= y_t2_px - 2.0)
+                if dentro and not any(cand.intersects(z) for z in zona_ocupada) and not cand.intersects(rect_t2):
+                    rect_exc = cand
+                    break
+            if rect_exc.intersects(rect_t2):
+                rect_exc.moveRight(rect_t2.left() - 8.0)
+
+            p.setPen(QPen(QColor("#16a34a"), 1.2))
+            p.setBrush(QColor(240, 253, 244, 240))
+            p.drawRoundedRect(rect_exc, 4.0, 4.0)
+            p.setFont(font_exc)
+            p.setPen(QColor("#15803d"))
+            p.drawText(rect_exc, Qt.AlignCenter, txt_exc)
+
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(248, 249, 255, 235))
+            p.drawRoundedRect(rect_t2.adjusted(-3, -1, 3, 1), 3.0, 3.0)
+            p.setFont(font_t2)
+            p.setPen(QColor("#64748b"))
+            p.drawText(rect_t2, Qt.AlignRight | Qt.AlignVCenter, txt_t2)
+
+        # 6. Etiqueta pequeña solo al exportar PNG en modo didáctico (en pantalla la barra superior ya indica el modo)
+        if para_exportar and not self.mostrar_valores and self.series:
+            txt_esq = "Esquemático — no a escala"
+            font_esq = QFont("Inter", 8)
+            font_esq.setBold(True)
+            fm_esq = QtGui.QFontMetrics(font_esq)
+            w_esq = fm_esq.horizontalAdvance(txt_esq) + 14.0
+            h_esq = 18.0
+            rect_esq = QRectF(
+                plot.right() - w_esq - 6.0,
+                plot.top() + 6.0,
+                w_esq,
+                h_esq,
+            )
+            p.setPen(QPen(QColor("#0284c7"), 1.0))
+            p.setBrush(QColor(240, 249, 255, 235))
+            p.drawRoundedRect(rect_esq, 4.0, 4.0)
+            p.setFont(font_esq)
+            p.setPen(QColor("#0369a1"))
+            p.drawText(rect_esq, Qt.AlignCenter, txt_esq)
+
+    def _dibujar_leyenda_perfil(self, p, r, hay_deficit, hay_exceso):
+        items_leyenda = []
+        if getattr(self, "mostrar_egl", True):
+            items_leyenda.append(("━━ EGL", "#e74c3c"))
+        if getattr(self, "mostrar_hgl", True):
+            items_leyenda.append(("╌╌ HGL", "#2980b9"))
+        for clave, simbolo, texto, col_hex, _, _, _ in self.elementos_leyenda():
+            etq = "■ v²/2g" if clave == "cinetica" else f"{simbolo} {texto}"
+            items_leyenda.append((etq, col_hex))
+
+        font_ley = QFont("Inter", 8, QFont.DemiBold)
+        p.setFont(font_ley)
+        fm = QtGui.QFontMetrics(font_ley)
+
+        ancho_total = sum(fm.horizontalAdvance(txt) + 14 for txt, _ in items_leyenda) + 12
+        h_ley = 24.0
+        ley_rect = QRectF(r.right() - ancho_total - 18, r.top() + 14, ancho_total, h_ley)
+
+        p.setPen(QPen(QColor("#cbd5e1"), 0.9))
+        p.setBrush(QColor(255, 255, 255, 245))
+        p.drawRoundedRect(ley_rect, 4.0, 4.0)
+
+        cur_x = ley_rect.left() + 8.0
+        for txt, col_hex in items_leyenda:
+            p.setPen(QColor(col_hex))
+            w_txt = fm.horizontalAdvance(txt)
+            p.drawText(QRectF(cur_x, ley_rect.top(), w_txt + 4, h_ley), Qt.AlignVCenter, txt)
+            cur_x += w_txt + 14.0
+
+    def exportar_imagen(self):
+        """Exporta la gráfica EGL/HGL a imagen PNG en alta resolución sobre fondo blanco."""
+        if not self.series:
+            QMessageBox.information(
+                self, "Sin datos", "No hay datos de perfil hidráulico calculados para exportar."
+            )
+            return
+
+        nombre_sugerido = "linea_energia_EGL_HGL.png"
+        ruta, _ = QFileDialog.getSaveFileName(
+            self,
+            "Guardar gráfica como imagen",
+            nombre_sugerido,
+            "Imágenes PNG (*.png)",
+        )
+        if not ruta:
+            return
+
+        if not ruta.lower().endswith(".png"):
+            ruta += ".png"
+
+        try:
+            ancho_logico = max(1100, self.width())
+            alto_logico = max(600, self.height())
+            escala = 2.5
+
+            ancho_px = int(ancho_logico * escala)
+            alto_px = int(alto_logico * escala)
+
+            imagen = QImage(ancho_px, alto_px, QImage.Format_ARGB32)
+            imagen.fill(QColor("#ffffff"))
+
+            p = QPainter(imagen)
+            p.setRenderHint(QPainter.Antialiasing, True)
+            p.setRenderHint(QPainter.TextAntialiasing, True)
+            p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+            p.scale(escala, escala)
+
+            rect_export = QRectF(0, 0, ancho_logico, alto_logico).adjusted(6, 6, -6, -6)
+            self._dibujar_perfil(p, rect_export, para_exportar=True)
+            p.end()
+
+            exito = imagen.save(ruta, "PNG")
+            if not exito:
+                raise IOError(f"El sistema operativo no permitió guardar el archivo en:\n{ruta}")
+        except Exception as error:
+            QMessageBox.critical(
+                self,
+                "Error al exportar imagen",
+                f"No se pudo guardar la imagen de la gráfica:\n\n{error}",
+            )
+            return
+
+
+GraficoEGLWidget = WidgetPerfilEGLHGL

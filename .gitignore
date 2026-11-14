@@ -1,0 +1,27 @@
+# Bytecode y cachés de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Entornos virtuales y distribución Python
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Artefactos compilados por PyInstaller (generados por build_exe.py)
+build/
+dist/
+
+# Cachés de pruebas, cobertura y previsualizaciones locales
+.pytest_cache/
+.coverage
+htmlcov/
+docs/previews/
+
+# Editores, sistema operativo y logs
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+*.log

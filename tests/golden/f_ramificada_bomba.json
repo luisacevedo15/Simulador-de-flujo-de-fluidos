@@ -1,0 +1,1999 @@
+{
+  "caso": "f_ramificada_bomba",
+  "version_captura": 1,
+  "fluido": {
+    "rho": 1000.0,
+    "mu": 0.001,
+    "g": 9.81,
+    "P_atm": 101325.0,
+    "P_vap": 2339.0
+  },
+  "unidades": {
+    "Q": "m3/s",
+    "v": "m/s",
+    "L_D_eps": "m",
+    "hf_H_EGL_HGL_NPSH": "m",
+    "presion": "Pa",
+    "potencia": "W",
+    "eficiencia": "fraccion",
+    "Re_f_K_LeD": "adimensional"
+  },
+  "tolerancias": {
+    "relativa_motor": 1e-08,
+    "interna_motor": 1e-11,
+    "Re_limite_laminar": 2000
+  },
+  "fuentes_sha256": {
+    "motor/__init__.py": "a68d65dd394ecb878f1b7d99c1a31d8aaf6ab989a9c201f0461ff9ae6bb30f8c",
+    "motor/bomba_ramificada.py": "0673af037f158b6084ec7010ad923e6453cc6a3f60d0028904ba16dc85449b33",
+    "motor/bombas.py": "0b95a3fdc86d85b2fab058cefb19983192bedcee7759d323fbe9eef3d2f2ff42",
+    "motor/ejecucion.py": "2f2d45fdb0b86069514bc7ea529acb7d3b035ede014ebb106f18953b45ed8554",
+    "motor/friccion.py": "c927ce01d863436d1b5ba12c5f220b86a96e9b69daad1bc98d984cfa6af1518f",
+    "motor/motor_fluidos.py": "33cac9764223aa32f3c8dc4a9ae219f2aafd1741b3c4cde04f0db9ddecfef582",
+    "motor/numerica.py": "b5c7231775f69e9115da9f8dd9e69fcb0aad34cff0d9880fe53305c7fe415f64",
+    "motor/redes.py": "6b6df94bb149260e825e2f1d62c2babf57cb46d80c5408b336e3c2ebff6e501b",
+    "motor/validacion.py": "6cad00f27ea8b8e2b5fcb0123a55e7d225c03e5d927f8f34e2304218e04c9f02"
+  },
+  "no_disponible": {
+    "perfil_grafico_egl_hgl": "No generado: ResolucionMixin._construir_serie_ruta_egl y _construir_puntos_tramo_egl requieren elementos y posiciones de PyQt. Las alturas nodales del motor se conservan por separado.",
+    "presion_nodos_internos": "El motor no entrega un campo general de presiones nodales; Hj y EGL no se convierten en presión sin cota, velocidad y referencia explícitas."
+  },
+  "entrada": {
+    "curvas": [
+      {
+        "nombre": "NPSHr",
+        "Q": [
+          0.0,
+          5e-06,
+          1e-05
+        ],
+        "H": [
+          0.01,
+          0.005,
+          0.0
+        ],
+        "eta": [
+          0.8,
+          0.8,
+          0.8
+        ],
+        "npsh_r": [
+          2.0,
+          2.5,
+          3.0
+        ],
+        "metodo": "lineal",
+        "coef_a": 0.01,
+        "coef_b": -1000.000000000001,
+        "coef_c": 1.0835884009060232e-07,
+        "Q_min": 0.0,
+        "Q_max": 1e-05,
+        "estado": "OK"
+      }
+    ],
+    "principal": {
+      "tuberia": "Principal",
+      "L": 20.0,
+      "D": 0.02,
+      "eps": 0.0,
+      "K": 0.0,
+      "LeD": 0.0,
+      "H": 0.0,
+      "z_bomba": 0.0,
+      "z_tanque": 0.0,
+      "P_tanque": 0.0,
+      "sub_tramos": [
+        {
+          "tuberia": "Succion",
+          "L": 10.0,
+          "D": 0.02,
+          "eps": 0.0,
+          "K": 0.5,
+          "LeD": 0.0,
+          "es_succion": true
+        },
+        {
+          "tuberia": "Hasta_J",
+          "L": 10.0,
+          "D": 0.02,
+          "eps": 0.0,
+          "K": 0.0,
+          "LeD": 5.0,
+          "es_succion": false
+        }
+      ]
+    },
+    "ramas": [
+      {
+        "tuberia": "R1",
+        "id_ramal": "R1",
+        "H": 0.0,
+        "segmentos": [
+          {
+            "tuberia": "R1a",
+            "L": 10.0,
+            "D": 0.02,
+            "eps": 0.0,
+            "K": 1.0,
+            "LeD": 0.0
+          },
+          {
+            "tuberia": "R1b",
+            "L": 10.0,
+            "D": 0.02,
+            "eps": 0.0,
+            "K": 0.0,
+            "LeD": 4.0
+          }
+        ]
+      },
+      {
+        "tuberia": "R2",
+        "L": 30.0,
+        "D": 0.02,
+        "eps": 0.0,
+        "K": 2.0,
+        "LeD": 0.0,
+        "H": 0.0,
+        "id_ramal": "R2"
+      }
+    ],
+    "tol_Q_absoluta": 1e-15,
+    "max_iter": 100
+  },
+  "solver": "motor.bomba_ramificada.BombaRamificadaMixin.resolver_bomba_ramificada",
+  "resultado": {
+    "Q_bomba": 5.445522418012842e-06,
+    "direccion": "Desde la aspiración de la bomba hacia la unión",
+    "H_bomba": 0.004554477581987158,
+    "H_j": 0.0017055886153018208,
+    "error_Q": 2.909566644147994e-16,
+    "resultados_ramales": [
+      {
+        "tuberia": "R1",
+        "Q": 3.2616571737137748e-06,
+        "hf": 0.0017055886153018208,
+        "direccion": "Sale de la unión",
+        "sentido": "sale",
+        "H_tanque": 0.0,
+        "id_ramal": "R1",
+        "perdidas_segmentos": [
+          {
+            "valores": [
+              0.0008521545965317961,
+              0.0008466607329136602,
+              5.493863618135911e-06
+            ],
+            "metadatos": {
+              "iteraciones": 0,
+              "historial_iteraciones": [],
+              "residuo_masa": 0.0,
+              "residuo_energia": 0.0,
+              "residuo_masa_relativo": 0.0,
+              "residuo_energia_relativo": 0.0,
+              "residuo_ecuacion": 0.0,
+              "estado": "OK",
+              "mensaje": "Balances verificados."
+            }
+          },
+          {
+            "valores": [
+              0.0008534340187769695,
+              0.0008466607329136602,
+              6.7732858633092815e-06
+            ],
+            "metadatos": {
+              "iteraciones": 0,
+              "historial_iteraciones": [],
+              "residuo_masa": 0.0,
+              "residuo_energia": 0.0,
+              "residuo_masa_relativo": 0.0,
+              "residuo_energia_relativo": 0.0,
+              "residuo_ecuacion": 0.0,
+              "estado": "OK",
+              "mensaje": "Balances verificados."
+            }
+          }
+        ]
+      },
+      {
+        "tuberia": "R2",
+        "Q": 2.183865244008111e-06,
+        "hf": 0.0017055886153018208,
+        "direccion": "Sale de la unión",
+        "sentido": "sale",
+        "H_tanque": 0.0,
+        "id_ramal": "R2",
+        "perdidas_segmentos": [
+          {
+            "valores": [
+              0.0017055886153018215,
+              0.001700662745592558,
+              4.925869709263429e-06
+            ],
+            "metadatos": {
+              "iteraciones": 0,
+              "historial_iteraciones": [],
+              "residuo_masa": 0.0,
+              "residuo_energia": 0.0,
+              "residuo_masa_relativo": 0.0,
+              "residuo_energia_relativo": 0.0,
+              "residuo_ecuacion": 0.0,
+              "estado": "OK",
+              "mensaje": "Balances verificados."
+            }
+          }
+        ]
+      }
+    ],
+    "tramo_bomba_resultado": {
+      "tuberia": "Principal",
+      "Q": 5.445522418012842e-06,
+      "H_bomba": 0.004554477581987158,
+      "hf": 0.0028488889666853368,
+      "direccion": "Sale de la bomba hacia la unión"
+    },
+    "iteraciones": [
+      {
+        "iteracion": 1,
+        "Q_supuesto": 5e-06,
+        "H_bomba": 0.004999999999999999,
+        "hf_bomba": 0.00261523349530614,
+        "H_j": 0.002384766504693859,
+        "error_Q": -2.6046598554103887e-06,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          4.554657036214919e-06,
+          3.0500028191954704e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 2,
+        "Q_supuesto": 7.500000000000001e-06,
+        "H_bomba": 0.0024999999999999996,
+        "hf_bomba": 0.003927691660373312,
+        "H_j": -0.0014276916603733125,
+        "error_Q": 1.2060554519141147e-05,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          2.7316548192097175e-06,
+          1.8288996999314284e-06
+        ],
+        "sentidos": [
+          "entra",
+          "entra"
+        ]
+      },
+      {
+        "iteracion": 3,
+        "Q_supuesto": 6.250000000000001e-06,
+        "H_bomba": 0.003749999999999999,
+        "hf_bomba": 0.0032710591263885513,
+        "H_j": 0.0004789408736114477,
+        "error_Q": 4.717460176841037e-06,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          9.180202493093223e-07,
+          6.145195738496421e-07
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 4,
+        "Q_supuesto": 5.625000000000001e-06,
+        "H_bomba": 0.004374999999999999,
+        "hf_bomba": 0.0029430454479845523,
+        "H_j": 0.0014319545520154464,
+        "error_Q": 1.0508635321219819e-06,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          2.739789145415688e-06,
+          1.8343473224623316e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 5,
+        "Q_supuesto": 5.3125e-06,
+        "H_bomba": 0.004687499999999999,
+        "hf_bomba": 0.002779114255929646,
+        "H_j": 0.001908385744070353,
+        "error_Q": -7.782751827567458e-07,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.648081090045016e-06,
+          2.4426940927117297e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 6,
+        "Q_supuesto": 5.468750000000001e-06,
+        "H_bomba": 0.004531249999999999,
+        "hf_bomba": 0.0028610735480281754,
+        "H_j": 0.0016701764519718235,
+        "error_Q": 1.3594903227567178e-07,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          3.1941501925604804e-06,
+          2.1386507751638486e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 7,
+        "Q_supuesto": 5.390625000000001e-06,
+        "H_bomba": 0.004609374999999999,
+        "hf_bomba": 0.00282009232599668,
+        "H_j": 0.001789282674003319,
+        "error_Q": -3.212492496619044e-07,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.4211693379421857e-06,
+          2.2907049117197193e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 8,
+        "Q_supuesto": 5.429687500000001e-06,
+        "H_bomba": 0.0045703125,
+        "hf_bomba": 0.0028405825430168705,
+        "H_j": 0.0017297299569831292,
+        "error_Q": -9.267166620648578e-08,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.3076731984363927e-06,
+          2.2146859677700937e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 9,
+        "Q_supuesto": 5.449218750000001e-06,
+        "H_bomba": 0.00455078125,
+        "hf_bomba": 0.0028508279470236325,
+        "H_j": 0.0016999533029763677,
+        "error_Q": 2.163329191444289e-08,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          3.2509150549256116e-06,
+          2.1766704031599467e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 10,
+        "Q_supuesto": 5.439453125e-06,
+        "H_bomba": 0.004560546875,
+        "hf_bomba": 0.0028457052203955287,
+        "H_j": 0.0017148416546044713,
+        "error_Q": -3.5520534697209834e-08,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.279294966385333e-06,
+          2.1956786933118776e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 11,
+        "Q_supuesto": 5.4443359375e-06,
+        "H_bomba": 0.004555664062499999,
+        "hf_bomba": 0.0028482665775534004,
+        "H_j": 0.0017073974849465988,
+        "error_Q": -6.943958302643488e-09,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.265105220595473e-06,
+          2.186174675207171e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 12,
+        "Q_supuesto": 5.446777343750001e-06,
+        "H_bomba": 0.00455322265625,
+        "hf_bomba": 0.002849547260749472,
+        "H_j": 0.0017036753955005277,
+        "error_Q": 7.344582598716831e-09,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          3.2580101902237174e-06,
+          2.181422570927567e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 13,
+        "Q_supuesto": 5.4455566406250005e-06,
+        "H_bomba": 0.004554443359375,
+        "hf_bomba": 0.002848906918766674,
+        "H_j": 0.0017055364406083264,
+        "error_Q": 2.0029109662010722e-10,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          3.2615577185251557e-06,
+          2.1837986310032246e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 14,
+        "Q_supuesto": 5.444946289062501e-06,
+        "H_bomba": 0.0045550537109375,
+        "hf_bomba": 0.002848586748063847,
+        "H_j": 0.0017064669628736526,
+        "error_Q": -3.3718388599124604e-09,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.2633314728332708e-06,
+          2.184986655089142e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 15,
+        "Q_supuesto": 5.445251464843751e-06,
+        "H_bomba": 0.004554748535156248,
+        "hf_bomba": 0.0028487468333912133,
+        "H_j": 0.001706001701765035,
+        "error_Q": -1.5857752017724359e-09,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.2624445965033543e-06,
+          2.184392643542169e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 16,
+        "Q_supuesto": 5.445404052734375e-06,
+        "H_bomba": 0.004554595947265625,
+        "hf_bomba": 0.0028488268760729317,
+        "H_j": 0.0017057690711926934,
+        "error_Q": -6.927423944132509e-10,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.2620011577320937e-06,
+          2.184095637396695e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 17,
+        "Q_supuesto": 5.445480346679688e-06,
+        "H_bomba": 0.004554519653320311,
+        "hf_bomba": 0.002848866897418301,
+        "H_j": 0.00170565275590201,
+        "error_Q": -2.4622575204570304e-10,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.261779438200778e-06,
+          2.1839471342309554e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 18,
+        "Q_supuesto": 5.445518493652345e-06,
+        "H_bomba": 0.004554481506347656,
+        "hf_bomba": 0.002848886908092112,
+        "H_j": 0.0017055945982555436,
+        "error_Q": -2.2967347599437446e-11,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.261668578375105e-06,
+          2.1838728826248397e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 19,
+        "Q_supuesto": 5.445537567138672e-06,
+        "H_bomba": 0.004554462432861327,
+        "hf_bomba": 0.0028488969134292993,
+        "H_j": 0.0017055655194320278,
+        "error_Q": 8.86618459433017e-11,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          3.261613148476761e-06,
+          2.183835756815968e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 20,
+        "Q_supuesto": 5.4455280303955085e-06,
+        "H_bomba": 0.004554471969604491,
+        "hf_bomba": 0.002848891910760682,
+        "H_j": 0.0017055800588438095,
+        "error_Q": 3.2847224327608754e-11,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          3.261640863450292e-06,
+          2.183854319720889e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 21,
+        "Q_supuesto": 5.445523262023927e-06,
+        "H_bomba": 0.004554476737976073,
+        "hf_bomba": 0.0028488894094263906,
+        "H_j": 0.001705587328549682,
+        "error_Q": 4.9399616536800555e-12,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          3.2616547208892886e-06,
+          2.1838636011729844e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 22,
+        "Q_supuesto": 5.445520877838136e-06,
+        "H_bomba": 0.004554479122161864,
+        "hf_bomba": 0.002848888158759251,
+        "H_j": 0.0017055909634026132,
+        "error_Q": -9.013693046994078e-12,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.261661649632242e-06,
+          2.1838682418989407e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 23,
+        "Q_supuesto": 5.445522069931031e-06,
+        "H_bomba": 0.004554477930068969,
+        "hf_bomba": 0.00284888878409282,
+        "H_j": 0.0017055891459761491,
+        "error_Q": -2.0368657212209667e-12,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.26165818526078e-06,
+          2.183865921535972e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 24,
+        "Q_supuesto": 5.445522665977479e-06,
+        "H_bomba": 0.004554477334022521,
+        "hf_bomba": 0.002848889096759606,
+        "H_j": 0.0017055882372629151,
+        "error_Q": 1.4515479628414126e-12,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          3.261656453075037e-06,
+          2.1838647613544794e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 25,
+        "Q_supuesto": 5.445522367954255e-06,
+        "H_bomba": 0.004554477632045745,
+        "hf_bomba": 0.0028488889404262125,
+        "H_j": 0.0017055886916195325,
+        "error_Q": -2.926824804923029e-13,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.261657319191509e-06,
+          2.1838653414452263e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 26,
+        "Q_supuesto": 5.445522516965867e-06,
+        "H_bomba": 0.004554477483034133,
+        "hf_bomba": 0.0028488890185929096,
+        "H_j": 0.0017055884644412234,
+        "error_Q": 5.794563420535642e-13,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          3.2616568861096723e-06,
+          2.183865051399853e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 27,
+        "Q_supuesto": 5.445522442460061e-06,
+        "H_bomba": 0.004554477557539939,
+        "hf_bomba": 0.002848888979509562,
+        "H_j": 0.001705588578030377,
+        "error_Q": 1.4336333498381898e-13,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          3.2616571026741875e-06,
+          2.1838651964225385e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 28,
+        "Q_supuesto": 5.445522405207158e-06,
+        "H_bomba": 0.004554477594792843,
+        "hf_bomba": 0.002848888959967887,
+        "H_j": 0.0017055886348249561,
+        "error_Q": -7.463597780446325e-14,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.2616572109092522e-06,
+          2.1838652689338836e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 29,
+        "Q_supuesto": 5.4455224238336095e-06,
+        "H_bomba": 0.00455447757616639,
+        "hf_bomba": 0.0028488889697387237,
+        "H_j": 0.0017055886064276664,
+        "error_Q": 3.4387278621654267e-14,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          3.2616571567681196e-06,
+          2.183865232678211e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 30,
+        "Q_supuesto": 5.445522414520383e-06,
+        "H_bomba": 0.004554477585479617,
+        "hf_bomba": 0.0028488889648533057,
+        "H_j": 0.0017055886206263117,
+        "error_Q": -2.0147949199864415e-14,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.2616571838622845e-06,
+          2.183865250806048e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 31,
+        "Q_supuesto": 5.445522419176996e-06,
+        "H_bomba": 0.004554477580823004,
+        "hf_bomba": 0.002848888967296014,
+        "H_j": 0.0017055886135269897,
+        "error_Q": 7.11966174627961e-15,
+        "accion": "Entra demasiado caudal a j. Disminuir Q de la bomba.",
+        "caudales_ramales": [
+          3.2616571703152037e-06,
+          2.1838652417421304e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 32,
+        "Q_supuesto": 5.4455224168486895e-06,
+        "H_bomba": 0.0045544775831513114,
+        "hf_bomba": 0.00284888896607466,
+        "H_j": 0.0017055886170766516,
+        "error_Q": -6.490548353497213e-15,
+        "accion": "Falta caudal en j. Aumentar Q de la bomba.",
+        "caudales_ramales": [
+          3.261657177065147e-06,
+          2.1838652462740904e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      },
+      {
+        "iteracion": 33,
+        "Q_supuesto": 5.445522418012842e-06,
+        "H_bomba": 0.004554477581987158,
+        "hf_bomba": 0.0028488889666853368,
+        "H_j": 0.0017055886153018208,
+        "error_Q": 2.909566644147994e-16,
+        "accion": "Equilibrio alcanzado",
+        "caudales_ramales": [
+          3.2616571737137748e-06,
+          2.183865244008111e-06
+        ],
+        "sentidos": [
+          "sale",
+          "sale"
+        ]
+      }
+    ],
+    "convergio": true,
+    "estado": "OK",
+    "mensaje": "Equilibrio alcanzado con éxito en 33 iteraciones.",
+    "curva_sistema": {
+      "valores": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          2.792575598980945e-07,
+          0.00023293422194742768
+        ],
+        [
+          5.58515119796189e-07,
+          0.00046593641523461825
+        ],
+        [
+          8.377726796942835e-07,
+          0.0006990065798047282
+        ],
+        [
+          1.117030239592378e-06,
+          0.0009321447154872275
+        ],
+        [
+          1.3962877994904723e-06,
+          0.0011653508224526462
+        ],
+        [
+          1.675545359388567e-06,
+          0.0013986249003599238
+        ],
+        [
+          1.9548029192866614e-06,
+          0.001631966949322747
+        ],
+        [
+          2.234060479184756e-06,
+          0.0018653769692274298
+        ],
+        [
+          2.51331803908285e-06,
+          0.0020988549598465974
+        ],
+        [
+          2.7925755989809446e-06,
+          0.0023324009211802502
+        ],
+        [
+          3.0718331588790395e-06,
+          0.0025660148534557624
+        ],
+        [
+          3.351090718777134e-06,
+          0.002799696755991012
+        ],
+        [
+          3.630348278675228e-06,
+          0.0030334466290133735
+        ],
+        [
+          3.909605838573323e-06,
+          0.0032672644729775935
+        ],
+        [
+          4.188863398471417e-06,
+          0.003501150286974179
+        ],
+        [
+          4.468120958369512e-06,
+          0.0037351040714578756
+        ],
+        [
+          4.747378518267606e-06,
+          0.003969125825973936
+        ],
+        [
+          5.0266360781657e-06,
+          0.004203215550977107
+        ],
+        [
+          5.3058936380637954e-06,
+          0.004437373246012645
+        ],
+        [
+          5.585151197961889e-06,
+          0.004671598910625798
+        ],
+        [
+          5.864408757859984e-06,
+          0.004905892545726063
+        ],
+        [
+          6.143666317758079e-06,
+          0.005140254150403945
+        ],
+        [
+          6.422923877656174e-06,
+          0.00537468372511419
+        ],
+        [
+          6.702181437554268e-06,
+          0.005609181269402053
+        ],
+        [
+          6.981438997452362e-06,
+          0.005843746783722279
+        ],
+        [
+          7.260696557350456e-06,
+          0.006078380266710629
+        ],
+        [
+          7.539954117248551e-06,
+          0.006313081720186091
+        ],
+        [
+          7.819211677146645e-06,
+          0.006547851142329674
+        ],
+        [
+          8.098469237044741e-06,
+          0.00678268853496037
+        ],
+        [
+          8.377726796942835e-06,
+          0.007017593896259187
+        ],
+        [
+          8.656984356840928e-06,
+          0.007252567226226124
+        ],
+        [
+          8.936241916739024e-06,
+          0.007487608525770682
+        ],
+        [
+          9.215499476637117e-06,
+          0.007722717794892854
+        ],
+        [
+          9.494757036535213e-06,
+          0.007957895032683151
+        ],
+        [
+          9.774014596433306e-06,
+          0.008193140239141566
+        ],
+        [
+          1.00532721563314e-05,
+          0.008428453415177601
+        ],
+        [
+          1.0332529716229496e-05,
+          0.008663834559881758
+        ],
+        [
+          1.0611787276127591e-05,
+          0.008899283672344544
+        ],
+        [
+          1.0891044836025685e-05,
+          0.009134800754384942
+        ]
+      ],
+      "metadatos": {
+        "iteraciones": 1597,
+        "historial_iteraciones": [],
+        "residuo_masa": 1.5548001254528376e-15,
+        "residuo_energia": 2.8715745059582076e-14,
+        "residuo_masa_relativo": 9.45020759412975e-11,
+        "residuo_energia_relativo": 9.499542164359216e-12,
+        "residuo_ecuacion": 0.0,
+        "estado": "OK",
+        "mensaje": "Balances verificados.",
+        "diagnosticos": [
+          {
+            "Q": 0.0,
+            "H_j": 0.0,
+            "ramas": [
+              {
+                "Q": 0.0,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 0.0,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 0.0,
+            "residuo_masa_relativo": 0.0,
+            "residuo_energia": 0.0,
+            "residuo_energia_relativo": 0.0,
+            "iteraciones": 1
+          },
+          {
+            "Q": 2.792575598980945e-07,
+            "H_j": 8.72098746640404e-05,
+            "ramas": [
+              {
+                "Q": 1.6728572130191754e-07,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 1.1197183863337741e-07,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 3.720046943354719e-17,
+            "residuo_masa_relativo": 6.660602034309198e-11,
+            "residuo_energia": 2.836001832678958e-16,
+            "residuo_energia_relativo": 3.251927426342625e-12,
+            "iteraciones": 43
+          },
+          {
+            "Q": 5.58515119796189e-07,
+            "H_j": 0.00017444744793237987,
+            "ramas": [
+              {
+                "Q": 3.3456913271032504e-07,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 2.2394598712982515e-07,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 4.3961221720735e-17,
+            "residuo_masa_relativo": 3.935544460734298e-11,
+            "residuo_energia": 1.7013842591728778e-16,
+            "residuo_energia_relativo": 9.752990252012035e-13,
+            "iteraciones": 45
+          },
+          {
+            "Q": 8.377726796942835e-07,
+            "H_j": 0.000261712719748175,
+            "ramas": [
+              {
+                "Q": 5.018502364100143e-07,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 3.3592244336001545e-07,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 7.574623894557103e-17,
+            "residuo_masa_relativo": 4.5206916373656264e-11,
+            "residuo_energia": 8.45786114755942e-16,
+            "residuo_energia_relativo": 3.2317348410492757e-12,
+            "iteraciones": 42
+          },
+          {
+            "Q": 1.117030239592378e-06,
+            "H_j": 0.00034900568994089554,
+            "ramas": [
+              {
+                "Q": 6.691290343569964e-07,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 4.4790120505128987e-07,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -1.8409181141564469e-16,
+            "residuo_masa_relativo": 8.240234010942814e-11,
+            "residuo_energia": 2.9655097821823517e-15,
+            "residuo_energia_relativo": 8.497024167957158e-12,
+            "iteraciones": 43
+          },
+          {
+            "Q": 1.3962877994904723e-06,
+            "H_j": 0.0004363263586810717,
+            "ramas": [
+              {
+                "Q": 8.364055291867744e-07,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 5.598822703709594e-07,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 6.726161579204311e-17,
+            "residuo_masa_relativo": 2.408587105572644e-11,
+            "residuo_energia": 9.023814681596853e-16,
+            "residuo_energia_relativo": 2.068134207815008e-12,
+            "iteraciones": 44
+          },
+          {
+            "Q": 1.675545359388567e-06,
+            "H_j": 0.0005236747256276431,
+            "ramas": [
+              {
+                "Q": 1.0036797225140803e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 6.718656368326877e-07,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -4.1798958364631586e-17,
+            "residuo_masa_relativo": 1.2473239871108608e-11,
+            "residuo_energia": 2.29547283958631e-15,
+            "residuo_energia_relativo": 4.383394361519172e-12,
+            "iteraciones": 40
+          },
+          {
+            "Q": 1.9548029192866614e-06,
+            "H_j": 0.0006110507908942964,
+            "ramas": [
+              {
+                "Q": 1.1709516168558202e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 7.838513025357865e-07,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 1.0494526458243968e-16,
+            "residuo_masa_relativo": 2.684292711664223e-11,
+            "residuo_energia": 1.2457482961858446e-15,
+            "residuo_energia_relativo": 2.0386984433203074e-12,
+            "iteraciones": 43
+          },
+          {
+            "Q": 2.234060479184756e-06,
+            "H_j": 0.0006984545543673448,
+            "ramas": [
+              {
+                "Q": 1.3382212142627403e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 8.958392652904934e-07,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 3.6847796678046024e-16,
+            "residuo_masa_relativo": 8.246821654634345e-11,
+            "residuo_energia": 3.6181994900186254e-15,
+            "residuo_energia_relativo": 5.180293359667423e-12,
+            "iteraciones": 38
+          },
+          {
+            "Q": 2.51331803908285e-06,
+            "H_j": 0.0007858860158194148,
+            "ramas": [
+              {
+                "Q": 1.5054885165569628e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 1.0078295227640005e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 2.38113243450919e-16,
+            "residuo_masa_relativo": 4.7370296901726546e-11,
+            "residuo_energia": 5.6840383094725055e-15,
+            "residuo_energia_relativo": 7.23264976734058e-12,
+            "iteraciones": 42
+          },
+          {
+            "Q": 2.7925755989809446e-06,
+            "H_j": 0.0008733451752505061,
+            "ramas": [
+              {
+                "Q": 1.6727535260582427e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 1.119822072917334e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -5.367647786750501e-18,
+            "residuo_masa_relativo": 9.61056844569293e-13,
+            "residuo_energia": 3.0208040929791125e-15,
+            "residuo_energia_relativo": 3.458889083703519e-12,
+            "iteraciones": 43
+          },
+          {
+            "Q": 3.0718331588790395e-06,
+            "H_j": 0.0009608320328879927,
+            "ramas": [
+              {
+                "Q": 1.8400162454330483e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 1.2318169140049182e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 5.589269722234853e-16,
+            "residuo_masa_relativo": 9.097612781427842e-11,
+            "residuo_energia": 9.127464409286468e-15,
+            "residuo_energia_relativo": 9.499542164359216e-12,
+            "iteraciones": 42
+          },
+          {
+            "Q": 3.351090718777134e-06,
+            "H_j": 0.0010483465880497533,
+            "ramas": [
+              {
+                "Q": 2.0072766757019777e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 1.3438140431194456e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 4.428923522955923e-17,
+            "residuo_masa_relativo": 6.608182073541178e-12,
+            "residuo_energia": 5.3143253686549485e-15,
+            "residuo_energia_relativo": 5.069244684185242e-12,
+            "iteraciones": 42
+          },
+          {
+            "Q": 3.630348278675228e-06,
+            "H_j": 0.0011358888409631618,
+            "ramas": [
+              {
+                "Q": 2.174534819468656e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 1.4558134585204215e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -6.8615089738460755e-16,
+            "residuo_masa_relativo": 9.45020759412975e-11,
+            "residuo_energia": 1.0464719368830089e-14,
+            "residuo_energia_relativo": 9.212802337204642e-12,
+            "iteraciones": 42
+          },
+          {
+            "Q": 3.909605838573323e-06,
+            "H_j": 0.0012234587920829654,
+            "ramas": [
+              {
+                "Q": 2.34179067997485e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 1.5678151587601373e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 1.6166470831295576e-16,
+            "residuo_masa_relativo": 2.0675320605798885e-11,
+            "residuo_energia": 1.375635716449608e-15,
+            "residuo_energia_relativo": 1.124382549989737e-12,
+            "iteraciones": 34
+          },
+          {
+            "Q": 4.188863398471417e-06,
+            "H_j": 0.0013110564404996694,
+            "ramas": [
+              {
+                "Q": 2.50904425768896e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 1.6798191406484674e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -1.33989600827316e-16,
+            "residuo_masa_relativo": 1.599355100459398e-11,
+            "residuo_energia": 1.240630861931713e-14,
+            "residuo_energia_relativo": 9.462833357951273e-12,
+            "iteraciones": 41
+          },
+          {
+            "Q": 4.468120958369512e-06,
+            "H_j": 0.0013986817866680212,
+            "ramas": [
+              {
+                "Q": 2.676295555707775e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 1.7918254027425912e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 8.085437701310649e-17,
+            "residuo_masa_relativo": 9.047917207894924e-12,
+            "residuo_energia": 7.574019536549237e-15,
+            "residuo_energia_relativo": 5.415112721666504e-12,
+            "iteraciones": 38
+          },
+          {
+            "Q": 4.747378518267606e-06,
+            "H_j": 0.0014863348301332735,
+            "ramas": [
+              {
+                "Q": 2.8435445754446355e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 1.903833942439314e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -3.836567971952573e-16,
+            "residuo_masa_relativo": 4.040722640236851e-11,
+            "residuo_energia": 1.0555792351318871e-15,
+            "residuo_energia_relativo": 7.101893959096939e-13,
+            "iteraciones": 42
+          },
+          {
+            "Q": 5.0266360781657e-06,
+            "H_j": 0.0015740155713501736,
+            "ramas": [
+              {
+                "Q": 3.0107913200452742e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 2.0158447583001726e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 1.7974716767094057e-16,
+            "residuo_masa_relativo": 1.7879468980109597e-11,
+            "residuo_energia": 6.901163668304733e-15,
+            "residuo_energia_relativo": 4.384431637093011e-12,
+            "iteraciones": 41
+          },
+          {
+            "Q": 5.3058936380637954e-06,
+            "H_j": 0.001661724009863974,
+            "ramas": [
+              {
+                "Q": 3.178035790854323e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 2.1278578477270114e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 5.17538824838272e-16,
+            "residuo_masa_relativo": 4.8770184639612335e-11,
+            "residuo_energia": 6.131380125840025e-15,
+            "residuo_energia_relativo": 3.689770436874129e-12,
+            "iteraciones": 41
+          },
+          {
+            "Q": 5.585151197961889e-06,
+            "H_j": 0.0017494601452199277,
+            "ramas": [
+              {
+                "Q": 3.3452779892614414e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 2.2398732081247037e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -5.757435408417985e-16,
+            "residuo_masa_relativo": 5.154234151096677e-11,
+            "residuo_energia": 4.340061296459474e-15,
+            "residuo_energia_relativo": 2.480800324784694e-12,
+            "iteraciones": 39
+          },
+          {
+            "Q": 5.864408757859984e-06,
+            "H_j": 0.001837223978327529,
+            "ramas": [
+              {
+                "Q": 3.512517919236751e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 2.3518908386421445e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 1.8911704613346764e-17,
+            "residuo_masa_relativo": 1.6124135777514812e-12,
+            "residuo_energia": 1.753805434212552e-15,
+            "residuo_energia_relativo": 9.545953323606656e-13,
+            "iteraciones": 41
+          },
+          {
+            "Q": 6.143666317758079e-06,
+            "H_j": 0.0019250155082772835,
+            "ramas": [
+              {
+                "Q": 3.6797555813228284e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 2.463910736108548e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -3.267031488548254e-16,
+            "residuo_masa_relativo": 2.6588614352246518e-11,
+            "residuo_energia": 6.728992363314035e-15,
+            "residuo_energia_relativo": 3.4955522874389103e-12,
+            "iteraciones": 41
+          },
+          {
+            "Q": 6.422923877656174e-06,
+            "H_j": 0.0020128347355239384,
+            "ramas": [
+              {
+                "Q": 3.846990978532293e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 2.5759328990968017e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -2.7078796290772728e-17,
+            "residuo_masa_relativo": 2.10798047794327e-12,
+            "residuo_energia": 1.7892805292962777e-14,
+            "residuo_energia_relativo": 8.88935637744015e-12,
+            "iteraciones": 42
+          },
+          {
+            "Q": 6.702181437554268e-06,
+            "H_j": 0.0021006816596127464,
+            "ramas": [
+              {
+                "Q": 4.014224112384216e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 2.6879573250217984e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -1.4825363565907843e-16,
+            "residuo_masa_relativo": 1.1060103120307216e-11,
+            "residuo_energia": 3.60735746829377e-15,
+            "residuo_energia_relativo": 1.7172318574718144e-12,
+            "iteraciones": 41
+          },
+          {
+            "Q": 6.981438997452362e-06,
+            "H_j": 0.002188556280998455,
+            "ramas": [
+              {
+                "Q": 4.181454985836036e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 2.799984012460736e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 8.444096862166538e-16,
+            "residuo_masa_relativo": 6.047533226844253e-11,
+            "residuo_energia": 2.0296264668928643e-15,
+            "residuo_energia_relativo": 9.2738143611592e-13,
+            "iteraciones": 41
+          },
+          {
+            "Q": 7.260696557350456e-06,
+            "H_j": 0.0022764585983168217,
+            "ramas": [
+              {
+                "Q": 4.348683598593933e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 2.912012957674543e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -1.0819804050648564e-15,
+            "residuo_masa_relativo": 7.450940805742101e-11,
+            "residuo_energia": 3.70536934468646e-15,
+            "residuo_energia_relativo": 1.6276901971448779e-12,
+            "iteraciones": 41
+          },
+          {
+            "Q": 7.539954117248551e-06,
+            "H_j": 0.0023643886133868364,
+            "ramas": [
+              {
+                "Q": 4.515909956291842e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 3.0240441609836596e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 2.6950894315737328e-17,
+            "residuo_masa_relativo": 1.787205458852578e-12,
+            "residuo_energia": 6.686491638152603e-15,
+            "residuo_energia_relativo": 2.828000270469341e-12,
+            "iteraciones": 41
+          },
+          {
+            "Q": 7.819211677146645e-06,
+            "H_j": 0.0024523463243895094,
+            "ramas": [
+              {
+                "Q": 4.683134057729682e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 3.136077618075024e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -1.3419390517419374e-15,
+            "residuo_masa_relativo": 8.581038007828846e-11,
+            "residuo_energia": 1.4010494153726682e-14,
+            "residuo_energia_relativo": 5.7130977033655615e-12,
+            "iteraciones": 41
+          },
+          {
+            "Q": 8.098469237044741e-06,
+            "H_j": 0.00254033173314383,
+            "ramas": [
+              {
+                "Q": 4.850355908606776e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 3.248113329272337e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 8.343714987587431e-16,
+            "residuo_masa_relativo": 5.1514148803523546e-11,
+            "residuo_energia": 7.078105462854367e-15,
+            "residuo_energia_relativo": 2.7862917942983528e-12,
+            "iteraciones": 41
+          },
+          {
+            "Q": 8.377726796942835e-06,
+            "H_j": 0.0026283448378308094,
+            "ramas": [
+              {
+                "Q": 5.017575507664492e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 3.3601512902685227e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 9.901798212743826e-16,
+            "residuo_masa_relativo": 5.909597228553688e-11,
+            "residuo_energia": 4.430050076775771e-15,
+            "residuo_energia_relativo": 1.6854904322341207e-12,
+            "iteraciones": 41
+          },
+          {
+            "Q": 8.656984356840928e-06,
+            "H_j": 0.002716385638450447,
+            "ramas": [
+              {
+                "Q": 5.184792857124456e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 3.472191499076035e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -6.404382232871875e-16,
+            "residuo_masa_relativo": 3.698968352673466e-11,
+            "residuo_energia": 2.366683238275158e-14,
+            "residuo_energia_relativo": 8.712618726791769e-12,
+            "iteraciones": 41
+          },
+          {
+            "Q": 8.936241916739024e-06,
+            "H_j": 0.0028044541359122377,
+            "ramas": [
+              {
+                "Q": 5.35200796083248e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 3.5842339548665325e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -1.040010769561353e-15,
+            "residuo_masa_relativo": 5.819061185405936e-11,
+            "residuo_energia": 1.401222887720266e-15,
+            "residuo_energia_relativo": 4.996419337998815e-13,
+            "iteraciones": 39
+          },
+          {
+            "Q": 9.215499476637117e-06,
+            "H_j": 0.0028925503302161815,
+            "ramas": [
+              {
+                "Q": 5.51922082107938e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 3.6962786556560476e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 9.831003199012311e-17,
+            "residuo_masa_relativo": 5.3339502779437864e-12,
+            "residuo_energia": 1.881264241609948e-14,
+            "residuo_energia_relativo": 6.5038254372201265e-12,
+            "iteraciones": 40
+          },
+          {
+            "Q": 9.494757036535213e-06,
+            "H_j": 0.0029806742204527836,
+            "ramas": [
+              {
+                "Q": 5.6864314383857526e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 3.808325598306679e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 1.572194794057652e-16,
+            "residuo_masa_relativo": 8.27927870083948e-12,
+            "residuo_energia": 1.54303653188137e-14,
+            "residuo_energia_relativo": 5.176803695262519e-12,
+            "iteraciones": 39
+          },
+          {
+            "Q": 9.774014596433306e-06,
+            "H_j": 0.003068825806622044,
+            "ramas": [
+              {
+                "Q": 5.853639814889581e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 3.920374780840063e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -7.03662456536143e-16,
+            "residuo_masa_relativo": 3.599659329433834e-11,
+            "residuo_energia": 2.3202793852927783e-14,
+            "residuo_energia_relativo": 7.560805114079723e-12,
+            "iteraciones": 40
+          },
+          {
+            "Q": 1.00532721563314e-05,
+            "H_j": 0.003157005089633458,
+            "ramas": [
+              {
+                "Q": 6.02084595458667e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 4.03242620243567e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 6.909400216683834e-16,
+            "residuo_masa_relativo": 3.4363936979936246e-11,
+            "residuo_energia": 4.9725848438875175e-15,
+            "residuo_energia_relativo": 1.5750956057105554e-12,
+            "iteraciones": 41
+          },
+          {
+            "Q": 1.0332529716229496e-05,
+            "H_j": 0.00324521206857753,
+            "ramas": [
+              {
+                "Q": 6.1880498578208094e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 4.144479859963486e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 1.5548001254528376e-15,
+            "residuo_masa_relativo": 7.523811535202771e-11,
+            "residuo_energia": 2.8715745059582076e-14,
+            "residuo_energia_relativo": 8.848649780896758e-12,
+            "iteraciones": 39
+          },
+          {
+            "Q": 1.0611787276127591e-05,
+            "H_j": 0.0033334467425447656,
+            "ramas": [
+              {
+                "Q": 6.355251525193175e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 4.256535750297134e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": -6.372804844598234e-16,
+            "residuo_masa_relativo": 3.00270099605461e-11,
+            "residuo_energia": 2.6308816236664256e-14,
+            "residuo_energia_relativo": 7.892376350545805e-12,
+            "iteraciones": 40
+          },
+          {
+            "Q": 1.0891044836025685e-05,
+            "H_j": 0.0034217091133541544,
+            "ramas": [
+              {
+                "Q": 6.5224509622972065e-06,
+                "direccion": "Sale de la unión"
+              },
+              {
+                "Q": 4.368593873777457e-06,
+                "direccion": "Sale de la unión"
+              }
+            ],
+            "residuo_masa": 4.897883314203266e-17,
+            "residuo_masa_relativo": 2.2485828439485007e-12,
+            "residuo_energia": 2.1901751245945178e-14,
+            "residuo_energia_relativo": 6.400822080540865e-12,
+            "iteraciones": 41
+          }
+        ]
+      }
+    },
+    "ecuacion_continuidad": "Q_b = R1 + R2",
+    "potencia_hidraulica": 0.00024330281089322077,
+    "potencia_freno": 0.00030412851361652596,
+    "eta": 0.8,
+    "npsh_r": 2.5445522418012843,
+    "npsh_d": 10.08889479890879,
+    "cavitacion": false,
+    "desglose": [
+      {
+        "id": "NPSHr",
+        "etapa": 1,
+        "Q_i": 5.445522418012842e-06,
+        "H_i": 0.004554477581987158,
+        "eta_i": 0.8,
+        "BHP_i": 0.00030412851361652596,
+        "activa": true,
+        "P_hidraulica": 0.00024330281089322077,
+        "npsh_d": 10.08889479890879,
+        "npsh_r": 2.5445522418012843,
+        "cavitacion": "SIN RIESGO"
+      }
+    ],
+    "hf_succion": 0.0014212051686834303,
+    "Q_op": 5.445522418012842e-06,
+    "H_op": 0.004554477581987158,
+    "H": 0.004554477581987158,
+    "Q": 5.445522418012842e-06,
+    "historial_iteraciones": []
+  },
+  "tramos": [
+    {
+      "id": "Succion",
+      "Q": 5.445522418012842e-06,
+      "area": 0.0003141592653589793,
+      "v": 0.017333636210889486,
+      "Re": 346.6727242177898,
+      "f": {
+        "valor": 0.18461215875695303,
+        "metadatos": {
+          "iteraciones": 0,
+          "historial_iteraciones": [],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 0.0,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      },
+      "ley_motor": "laminar",
+      "regimen_ui": "Laminar",
+      "hf_total": 0.0014212051686834303,
+      "hf_distribuida": 0.0014135483148533727,
+      "hf_localizada": 7.656853830057574e-06,
+      "resultado_perdida": {
+        "valores": [
+          0.0014212051686834303,
+          0.0014135483148533727,
+          7.656853830057574e-06
+        ],
+        "metadatos": {
+          "iteraciones": 0,
+          "historial_iteraciones": [],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 0.0,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      }
+    },
+    {
+      "id": "Hasta_J",
+      "Q": 5.445522418012842e-06,
+      "area": 0.0003141592653589793,
+      "v": 0.017333636210889486,
+      "Re": 346.6727242177898,
+      "f": {
+        "valor": 0.18461215875695303,
+        "metadatos": {
+          "iteraciones": 0,
+          "historial_iteraciones": [],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 0.0,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      },
+      "ley_motor": "laminar",
+      "regimen_ui": "Laminar",
+      "hf_total": 0.0014276837980019064,
+      "hf_distribuida": 0.0014135483148533727,
+      "hf_localizada": 1.4135483148533728e-05,
+      "resultado_perdida": {
+        "valores": [
+          0.0014276837980019064,
+          0.0014135483148533727,
+          1.4135483148533728e-05
+        ],
+        "metadatos": {
+          "iteraciones": 0,
+          "historial_iteraciones": [],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 0.0,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      }
+    },
+    {
+      "id": "R1a",
+      "Q": 3.2616571737137748e-06,
+      "area": 0.0003141592653589793,
+      "v": 0.010382177237353761,
+      "Re": 207.64354474707523,
+      "f": {
+        "valor": 0.3082205135630708,
+        "metadatos": {
+          "iteraciones": 0,
+          "historial_iteraciones": [],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 0.0,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      },
+      "ley_motor": "laminar",
+      "regimen_ui": "Laminar",
+      "hf_total": 0.0008521545965317961,
+      "hf_distribuida": 0.0008466607329136602,
+      "hf_localizada": 5.493863618135911e-06,
+      "resultado_perdida": {
+        "valores": [
+          0.0008521545965317961,
+          0.0008466607329136602,
+          5.493863618135911e-06
+        ],
+        "metadatos": {
+          "iteraciones": 0,
+          "historial_iteraciones": [],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 0.0,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      }
+    },
+    {
+      "id": "R1b",
+      "Q": 3.2616571737137748e-06,
+      "area": 0.0003141592653589793,
+      "v": 0.010382177237353761,
+      "Re": 207.64354474707523,
+      "f": {
+        "valor": 0.3082205135630708,
+        "metadatos": {
+          "iteraciones": 0,
+          "historial_iteraciones": [],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 0.0,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      },
+      "ley_motor": "laminar",
+      "regimen_ui": "Laminar",
+      "hf_total": 0.0008534340187769695,
+      "hf_distribuida": 0.0008466607329136602,
+      "hf_localizada": 6.7732858633092815e-06,
+      "resultado_perdida": {
+        "valores": [
+          0.0008534340187769695,
+          0.0008466607329136602,
+          6.7732858633092815e-06
+        ],
+        "metadatos": {
+          "iteraciones": 0,
+          "historial_iteraciones": [],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 0.0,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      }
+    },
+    {
+      "id": "R2",
+      "Q": 2.183865244008111e-06,
+      "area": 0.0003141592653589793,
+      "v": 0.00695145897260958,
+      "Re": 139.02917945219158,
+      "f": {
+        "valor": 0.4603350192540544,
+        "metadatos": {
+          "iteraciones": 0,
+          "historial_iteraciones": [],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 0.0,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      },
+      "ley_motor": "laminar",
+      "regimen_ui": "Laminar",
+      "hf_total": 0.0017055886153018215,
+      "hf_distribuida": 0.001700662745592558,
+      "hf_localizada": 4.925869709263429e-06,
+      "resultado_perdida": {
+        "valores": [
+          0.0017055886153018215,
+          0.001700662745592558,
+          4.925869709263429e-06
+        ],
+        "metadatos": {
+          "iteraciones": 0,
+          "historial_iteraciones": [],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 0.0,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      }
+    }
+  ],
+  "balances": {
+    "residuo_masa": 2.909566644147994e-16,
+    "residuo_masa_relativo": 5.343044102662498e-11,
+    "residuo_energia_principal": 0.0,
+    "residuos_energia_ramales": [
+      -6.94474859563865e-15,
+      -6.505213034913027e-19
+    ]
+  }
+}

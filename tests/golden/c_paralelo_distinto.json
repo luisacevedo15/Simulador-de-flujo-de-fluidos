@@ -1,0 +1,679 @@
+{
+  "caso": "c_paralelo_distinto",
+  "version_captura": 1,
+  "fluido": {
+    "rho": 1000.0,
+    "mu": 0.001,
+    "g": 9.81,
+    "P_atm": 101325.0,
+    "P_vap": 2339.0
+  },
+  "unidades": {
+    "Q": "m3/s",
+    "v": "m/s",
+    "L_D_eps": "m",
+    "hf_H_EGL_HGL_NPSH": "m",
+    "presion": "Pa",
+    "potencia": "W",
+    "eficiencia": "fraccion",
+    "Re_f_K_LeD": "adimensional"
+  },
+  "tolerancias": {
+    "relativa_motor": 1e-08,
+    "interna_motor": 1e-11,
+    "Re_limite_laminar": 2000
+  },
+  "fuentes_sha256": {
+    "motor/__init__.py": "a68d65dd394ecb878f1b7d99c1a31d8aaf6ab989a9c201f0461ff9ae6bb30f8c",
+    "motor/bomba_ramificada.py": "0673af037f158b6084ec7010ad923e6453cc6a3f60d0028904ba16dc85449b33",
+    "motor/bombas.py": "0b95a3fdc86d85b2fab058cefb19983192bedcee7759d323fbe9eef3d2f2ff42",
+    "motor/ejecucion.py": "2f2d45fdb0b86069514bc7ea529acb7d3b035ede014ebb106f18953b45ed8554",
+    "motor/friccion.py": "c927ce01d863436d1b5ba12c5f220b86a96e9b69daad1bc98d984cfa6af1518f",
+    "motor/motor_fluidos.py": "33cac9764223aa32f3c8dc4a9ae219f2aafd1741b3c4cde04f0db9ddecfef582",
+    "motor/numerica.py": "b5c7231775f69e9115da9f8dd9e69fcb0aad34cff0d9880fe53305c7fe415f64",
+    "motor/redes.py": "6b6df94bb149260e825e2f1d62c2babf57cb46d80c5408b336e3c2ebff6e501b",
+    "motor/validacion.py": "6cad00f27ea8b8e2b5fcb0123a55e7d225c03e5d927f8f34e2304218e04c9f02"
+  },
+  "no_disponible": {
+    "perfil_grafico_egl_hgl": "No generado: ResolucionMixin._construir_serie_ruta_egl y _construir_puntos_tramo_egl requieren elementos y posiciones de PyQt. Las alturas nodales del motor se conservan por separado.",
+    "presion_nodos_internos": "El motor no entrega un campo general de presiones nodales; Hj y EGL no se convierten en presión sin cota, velocidad y referencia explícitas."
+  },
+  "entrada": {
+    "ramas": [
+      {
+        "tuberia": "R1",
+        "L": 100.0,
+        "D": 0.1,
+        "eps": 0.0,
+        "K": 0.0,
+        "LeD": 0.0
+      },
+      {
+        "tuberia": "R2",
+        "L": 100.0,
+        "D": 0.05,
+        "eps": 0.0,
+        "K": 1.5,
+        "LeD": 8.0
+      }
+    ],
+    "Q_total": 0.001
+  },
+  "solver": "motor.redes.RedesMixin.resolver_paralelo",
+  "resultado": {
+    "valores": [
+      0.01919048231705485,
+      [
+        {
+          "valor": 0.0008716187160347551,
+          "metadatos": {
+            "iteraciones": 2,
+            "historial_iteraciones": [],
+            "residuo_masa": 0.0,
+            "residuo_energia": -6.140921104957897e-16,
+            "residuo_masa_relativo": 0.0,
+            "residuo_energia_relativo": 3.199982680737719e-14,
+            "residuo_ecuacion": 0.0,
+            "estado": "OK",
+            "mensaje": "Balances verificados.",
+            "direccion": "Según la orientación declarada del tramo"
+          }
+        },
+        {
+          "valor": 0.00012838128396471622,
+          "metadatos": {
+            "iteraciones": 36,
+            "historial_iteraciones": [],
+            "residuo_masa": 0.0,
+            "residuo_energia": -9.532305500492555e-14,
+            "residuo_masa_relativo": 0.0,
+            "residuo_energia_relativo": 4.967204754421968e-12,
+            "residuo_ecuacion": 0.0,
+            "estado": "OK",
+            "mensaje": "Balances verificados.",
+            "direccion": "Según la orientación declarada del tramo"
+          }
+        }
+      ],
+      [
+        {
+          "valores": [
+            0.019190482317054235,
+            0.019190482317054235,
+            0.0
+          ],
+          "metadatos": {
+            "iteraciones": 17,
+            "historial_iteraciones": [],
+            "residuo_masa": 0.0,
+            "residuo_energia": 0.0,
+            "residuo_masa_relativo": 0.0,
+            "residuo_energia_relativo": 0.0,
+            "residuo_ecuacion": 1.863533668644796e-14,
+            "estado": "OK",
+            "mensaje": "Balances verificados."
+          }
+        },
+        {
+          "valores": [
+            0.019190482316959526,
+            0.018788487835977367,
+            0.0004019944809821601
+          ],
+          "metadatos": {
+            "iteraciones": 19,
+            "historial_iteraciones": [],
+            "residuo_masa": 0.0,
+            "residuo_energia": 0.0,
+            "residuo_masa_relativo": 0.0,
+            "residuo_energia_relativo": 0.0,
+            "residuo_ecuacion": 1.0143118497196475e-14,
+            "estado": "OK",
+            "mensaje": "Balances verificados."
+          }
+        }
+      ]
+    ],
+    "metadatos": {
+      "iteraciones": 36,
+      "historial_iteraciones": [],
+      "residuo_masa": -5.28656979303932e-16,
+      "residuo_energia": 9.532305500492555e-14,
+      "residuo_masa_relativo": 5.28656979303932e-13,
+      "residuo_energia_relativo": 4.967204754421968e-12,
+      "residuo_ecuacion": 0.0,
+      "estado": "OK",
+      "mensaje": "Balances verificados.",
+      "hf": 0.01919048231705485,
+      "direccion": "Desde el nudo de entrada hacia el nudo de salida",
+      "caudales": [
+        {
+          "valor": 0.0008716187160347551,
+          "metadatos": {
+            "iteraciones": 2,
+            "historial_iteraciones": [],
+            "residuo_masa": 0.0,
+            "residuo_energia": -6.140921104957897e-16,
+            "residuo_masa_relativo": 0.0,
+            "residuo_energia_relativo": 3.199982680737719e-14,
+            "residuo_ecuacion": 0.0,
+            "estado": "OK",
+            "mensaje": "Balances verificados.",
+            "direccion": "Según la orientación declarada del tramo"
+          }
+        },
+        {
+          "valor": 0.00012838128396471622,
+          "metadatos": {
+            "iteraciones": 36,
+            "historial_iteraciones": [],
+            "residuo_masa": 0.0,
+            "residuo_energia": -9.532305500492555e-14,
+            "residuo_masa_relativo": 0.0,
+            "residuo_energia_relativo": 4.967204754421968e-12,
+            "residuo_ecuacion": 0.0,
+            "estado": "OK",
+            "mensaje": "Balances verificados.",
+            "direccion": "Según la orientación declarada del tramo"
+          }
+        }
+      ],
+      "perdidas_tramos": [
+        {
+          "valores": [
+            0.019190482317054235,
+            0.019190482317054235,
+            0.0
+          ],
+          "metadatos": {
+            "iteraciones": 17,
+            "historial_iteraciones": [],
+            "residuo_masa": 0.0,
+            "residuo_energia": 0.0,
+            "residuo_masa_relativo": 0.0,
+            "residuo_energia_relativo": 0.0,
+            "residuo_ecuacion": 1.863533668644796e-14,
+            "estado": "OK",
+            "mensaje": "Balances verificados."
+          }
+        },
+        {
+          "valores": [
+            0.019190482316959526,
+            0.018788487835977367,
+            0.0004019944809821601
+          ],
+          "metadatos": {
+            "iteraciones": 19,
+            "historial_iteraciones": [],
+            "residuo_masa": 0.0,
+            "residuo_energia": 0.0,
+            "residuo_masa_relativo": 0.0,
+            "residuo_energia_relativo": 0.0,
+            "residuo_ecuacion": 1.0143118497196475e-14,
+            "estado": "OK",
+            "mensaje": "Balances verificados."
+          }
+        }
+      ]
+    }
+  },
+  "ramas": [
+    {
+      "id": "R1",
+      "Q": 0.0008716187160347551,
+      "area": 0.007853981633974483,
+      "v": 0.11097794171867387,
+      "Re": 11097.794171867386,
+      "f": {
+        "valor": 0.030571134903967286,
+        "metadatos": {
+          "iteraciones": 17,
+          "historial_iteraciones": [
+            {
+              "propuesto": 1.0,
+              "obtenido": 7.219028,
+              "f_final": 0.01918857
+            },
+            {
+              "propuesto": 7.219028,
+              "obtenido": 5.519049,
+              "f_final": 0.03283005
+            },
+            {
+              "propuesto": 5.519049,
+              "obtenido": 5.749972,
+              "f_final": 0.03024605
+            },
+            {
+              "propuesto": 5.749972,
+              "obtenido": 5.714721,
+              "f_final": 0.03062034
+            },
+            {
+              "propuesto": 5.714721,
+              "obtenido": 5.720009,
+              "f_final": 0.03056374
+            },
+            {
+              "propuesto": 5.720009,
+              "obtenido": 5.719214,
+              "f_final": 0.03057225
+            },
+            {
+              "propuesto": 5.719214,
+              "obtenido": 5.719333,
+              "f_final": 0.03057097
+            },
+            {
+              "propuesto": 5.719333,
+              "obtenido": 5.719315,
+              "f_final": 0.03057116
+            },
+            {
+              "propuesto": 5.719315,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057114
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            }
+          ],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 1.863533668644796e-14,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      },
+      "ley_motor": "colebrook",
+      "regimen_ui": "Turbulento",
+      "hf_total": 0.019190482317054235,
+      "hf_distribuida": 0.019190482317054235,
+      "hf_localizada": 0.0,
+      "resultado_perdida": {
+        "valores": [
+          0.019190482317054235,
+          0.019190482317054235,
+          0.0
+        ],
+        "metadatos": {
+          "iteraciones": 17,
+          "historial_iteraciones": [
+            {
+              "propuesto": 1.0,
+              "obtenido": 7.219028,
+              "f_final": 0.01918857
+            },
+            {
+              "propuesto": 7.219028,
+              "obtenido": 5.519049,
+              "f_final": 0.03283005
+            },
+            {
+              "propuesto": 5.519049,
+              "obtenido": 5.749972,
+              "f_final": 0.03024605
+            },
+            {
+              "propuesto": 5.749972,
+              "obtenido": 5.714721,
+              "f_final": 0.03062034
+            },
+            {
+              "propuesto": 5.714721,
+              "obtenido": 5.720009,
+              "f_final": 0.03056374
+            },
+            {
+              "propuesto": 5.720009,
+              "obtenido": 5.719214,
+              "f_final": 0.03057225
+            },
+            {
+              "propuesto": 5.719214,
+              "obtenido": 5.719333,
+              "f_final": 0.03057097
+            },
+            {
+              "propuesto": 5.719333,
+              "obtenido": 5.719315,
+              "f_final": 0.03057116
+            },
+            {
+              "propuesto": 5.719315,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057114
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            },
+            {
+              "propuesto": 5.719318,
+              "obtenido": 5.719318,
+              "f_final": 0.03057113
+            }
+          ],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 1.863533668644796e-14,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      }
+    },
+    {
+      "id": "R2",
+      "Q": 0.00012838128396471622,
+      "area": 0.001963495408493621,
+      "v": 0.06538405101910036,
+      "Re": 3269.202550955018,
+      "f": {
+        "valor": 0.043113887658239466,
+        "metadatos": {
+          "iteraciones": 19,
+          "historial_iteraciones": [
+            {
+              "propuesto": 1.0,
+              "obtenido": 6.167936,
+              "f_final": 0.02628574
+            },
+            {
+              "propuesto": 6.167936,
+              "obtenido": 4.603283,
+              "f_final": 0.0471916
+            },
+            {
+              "propuesto": 4.603283,
+              "obtenido": 4.854914,
+              "f_final": 0.04242647
+            },
+            {
+              "propuesto": 4.854914,
+              "obtenido": 4.809143,
+              "f_final": 0.0432379
+            },
+            {
+              "propuesto": 4.809143,
+              "obtenido": 4.81729,
+              "f_final": 0.04309178
+            },
+            {
+              "propuesto": 4.81729,
+              "obtenido": 4.815834,
+              "f_final": 0.04311784
+            },
+            {
+              "propuesto": 4.815834,
+              "obtenido": 4.816094,
+              "f_final": 0.04311318
+            },
+            {
+              "propuesto": 4.816094,
+              "obtenido": 4.816048,
+              "f_final": 0.04311401
+            },
+            {
+              "propuesto": 4.816048,
+              "obtenido": 4.816056,
+              "f_final": 0.04311387
+            },
+            {
+              "propuesto": 4.816056,
+              "obtenido": 4.816054,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816054,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            }
+          ],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 1.0143118497196475e-14,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      },
+      "ley_motor": "colebrook",
+      "regimen_ui": "Transición",
+      "hf_total": 0.019190482316959526,
+      "hf_distribuida": 0.018788487835977367,
+      "hf_localizada": 0.0004019944809821601,
+      "resultado_perdida": {
+        "valores": [
+          0.019190482316959526,
+          0.018788487835977367,
+          0.0004019944809821601
+        ],
+        "metadatos": {
+          "iteraciones": 19,
+          "historial_iteraciones": [
+            {
+              "propuesto": 1.0,
+              "obtenido": 6.167936,
+              "f_final": 0.02628574
+            },
+            {
+              "propuesto": 6.167936,
+              "obtenido": 4.603283,
+              "f_final": 0.0471916
+            },
+            {
+              "propuesto": 4.603283,
+              "obtenido": 4.854914,
+              "f_final": 0.04242647
+            },
+            {
+              "propuesto": 4.854914,
+              "obtenido": 4.809143,
+              "f_final": 0.0432379
+            },
+            {
+              "propuesto": 4.809143,
+              "obtenido": 4.81729,
+              "f_final": 0.04309178
+            },
+            {
+              "propuesto": 4.81729,
+              "obtenido": 4.815834,
+              "f_final": 0.04311784
+            },
+            {
+              "propuesto": 4.815834,
+              "obtenido": 4.816094,
+              "f_final": 0.04311318
+            },
+            {
+              "propuesto": 4.816094,
+              "obtenido": 4.816048,
+              "f_final": 0.04311401
+            },
+            {
+              "propuesto": 4.816048,
+              "obtenido": 4.816056,
+              "f_final": 0.04311387
+            },
+            {
+              "propuesto": 4.816056,
+              "obtenido": 4.816054,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816054,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            },
+            {
+              "propuesto": 4.816055,
+              "obtenido": 4.816055,
+              "f_final": 0.04311389
+            }
+          ],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 1.0143118497196475e-14,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      }
+    }
+  ],
+  "balances": {
+    "residuo_masa": -5.28656979303932e-16,
+    "residuo_energia": 9.532305500492555e-14
+  }
+}

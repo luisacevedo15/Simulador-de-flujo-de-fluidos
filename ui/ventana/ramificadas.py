@@ -1,0 +1,1543 @@
+"""Resolución de uniones ramificadas y de doble nudo."""
+
+"""Resolución de uniones ramificadas y de doble nudo."""
+
+import math
+
+from motor.curvas import construir_curvas_estacion, evaluar_carga_sistema_ramificada
+from motor import MotorFluidos
+from motor.bombas import EstacionBombeo
+from ui.reportes import (
+    RPT_ROJO,
+    RPT_VERDE,
+    rpt_ecuaciones,
+    rpt_estado,
+    rpt_grid_2x2,
+    rpt_num,
+    rpt_seccion_cad,
+    rpt_tabla,
+)
+from ui.nombres_bombas import nombre_equipo_bomba
+from ui.graficos import AccesorioGrafico, BombaGrafica, NodoUnionGrafico, TanqueGrafico
+from ui.ventana.dashboard import desglosar_perdidas_tuberia
+from ui.ventana.invalidacion import (
+    aplicar_sentido_flujo_ruta,
+    asignar_sentido_flujo,
+    limpiar_sentido_flujo_escena,
+)
+
+
+class RamificadasMixin:
+    """Resolución de uniones ramificadas y de doble nudo."""
+
+    @staticmethod
+    def _analizar_red_union(union):
+        """
+        Analiza las ramas que parten de un NodoUnionGrafico.
+        Detecta si es una red de 3 reservorios tradicional, una red ramificada con bomba,
+        o una configuración inválida.
+        """
+        if len(union.tuberias) < 3:
+            return {
+                "valida": False,
+                "tipo": "incompleta",
+                "mensaje": f"tiene {len(union.tuberias)} tubería(s) conectada(s) y se necesitan al menos 3",
+            }
+
+        ramas = []
+        for tub in union.tuberias:
+            tuberias_en_rama = [tub]
+            nodo_actual = tub.nodo_destino if tub.nodo_origen is union else tub.nodo_origen
+            visitados = {union, nodo_actual}
+            bomba_en_rama = None
+            tanque_final = None
+            error_rama = None
+
+            while True:
+                if isinstance(nodo_actual, TanqueGrafico):
+                    tanque_final = nodo_actual
+                    break
+                elif isinstance(nodo_actual, BombaGrafica):
+                    if bomba_en_rama is not None:
+                        error_rama = f"Hay más de una bomba en la rama de {tub.nombre}"
+                        break
+                    bomba_en_rama = nodo_actual
+                    siguientes = [t for t in nodo_actual.tuberias if t not in tuberias_en_rama]
+                    if len(siguientes) != 1:
+                        error_rama = f"{nodo_actual.nombre} debe conectar exactamente dos tuberías (succión y descarga)"
+                        break
+                    tub_sig = siguientes[0]
+                    tuberias_en_rama.append(tub_sig)
+                    nodo_actual = tub_sig.nodo_destino if tub_sig.nodo_origen is nodo_actual else tub_sig.nodo_origen
+                    if nodo_actual in visitados:
+                        error_rama = "Ciclo cerrado detectado en la rama"
+                        break
+                    visitados.add(nodo_actual)
+                elif isinstance(nodo_actual, (AccesorioGrafico, NodoUnionGrafico)):
+                    siguientes = [t for t in nodo_actual.tuberias if t not in tuberias_en_rama]
+                    if len(siguientes) != 1:
+                        error_rama = f"{nodo_actual.nombre} debe conectar dos tuberías"
+                        break
+                    tub_sig = siguientes[0]
+                    tuberias_en_rama.append(tub_sig)
+                    nodo_actual = tub_sig.nodo_destino if tub_sig.nodo_origen is nodo_actual else tub_sig.nodo_origen
+                    if nodo_actual in visitados:
+                        error_rama = "Ciclo cerrado detectado en la rama"
+                        break
+                    visitados.add(nodo_actual)
+                else:
+                    error_rama = f"{tub.nombre} no llega a un tanque o bomba válida"
+                    break
+
+            if error_rama is not None or tanque_final is None:
+                return {"valida": False, "tipo": "invalido", "mensaje": error_rama or "Rama sin tanque final"}
+
+            ramas.append({
+                "tuberia_directa": tub,
+                "tuberias": tuberias_en_rama,
+                "tanque": tanque_final,
+                "bomba": bomba_en_rama,
+            })
+
+        # No aceptar laterales detrás de los tanques ni ramas que compartan
+        # tuberías: ambas cosas cambiarían el balance de la topología analizada.
+        tubos_red = [t for r in ramas for t in r['tuberias']]
+        if len(set(tubos_red)) != len(tubos_red) or any(
+                any(t not in tubos_red for t in r['tanque'].tuberias) for r in ramas):
+            return {"valida": False, "tipo": "invalido",
+                    "mensaje": "Topología no soportada: bypass o conexiones adicionales entre ramales/tanques"}
+
+        tanques_todos = [r["tanque"] for r in ramas]
+        if len(set(tanques_todos)) != len(tanques_todos):
+            return {"valida": False, "tipo": "invalido", "mensaje": "Cada ramal debe terminar en un tanque distinto"}
+
+        ramas_bomba = [r for r in ramas if r["bomba"] is not None]
+        ramas_sin_bomba = [r for r in ramas if r["bomba"] is None]
+
+        if len(ramas_bomba) == 0:
+            if len(ramas) == 3:
+                return {
+                    "valida": True,
+                    "tipo": "tres_reservorios",
+                    "tanques": tanques_todos,
+                    "ramas": ramas,
+                }
+            return {
+                "valida": False,
+                "tipo": "invalido",
+                "mensaje": f"Se soportan 3 reservorios para redes sin bomba (actual: {len(ramas)})",
+            }
+        elif len(ramas_bomba) == 1 and len(ramas_sin_bomba) >= 2:
+            return {
+                "valida": True,
+                "tipo": "bomba_ramificada",
+                "bomba": ramas_bomba[0]["bomba"],
+                "tanque_bomba": ramas_bomba[0]["tanque"],
+                "tuberias_bomba": list(reversed(ramas_bomba[0]["tuberias"])),
+                "ramas_tanques": ramas_sin_bomba,
+                "ramas": ramas,
+            }
+        elif len(ramas_bomba) > 1:
+            return {
+                "valida": False,
+                "tipo": "invalido",
+                "mensaje": "Se soporta una bomba principal alimentando la red ramificada",
+            }
+        else:
+            return {
+                "valida": False,
+                "tipo": "invalido",
+                "mensaje": "Se requieren al menos 2 ramales a tanques desde la unión con bomba",
+            }
+
+    @staticmethod
+    def _validar_union_ramificada(union):
+        analisis = RamificadasMixin._analizar_red_union(union)
+        if not analisis.get("valida"):
+            return None, analisis.get("mensaje", "Unión inválida")
+        if analisis["tipo"] == "tres_reservorios":
+            return analisis["tanques"], None
+        if analisis["tipo"] == "bomba_ramificada":
+            tanques = [analisis["tanque_bomba"]] + [r["tanque"] for r in analisis["ramas_tanques"]]
+            return tanques, None
+        return None, analisis.get("mensaje", "Configuración no soportada")
+
+    def _segmentos_ramal_si(self, rama):
+        """Conserva cada L, D, eps y los accesorios de su propietario único."""
+        segmentos = []
+        for tub in rama['tuberias']:
+            L, D, eps = self._datos_si(tub)
+            segmentos.append(dict(tuberia=tub, L=L, D=D, eps=eps,
+                K=tub.sumatoria_K, LeD=tub.sumatoria_Le_D))
+        return segmentos
+
+    @staticmethod
+    def _estructura_doble_nudo(a, b):
+        centrales = [t for t in a.tuberias if b in (t.nodo_origen, t.nodo_destino)]
+        if len(centrales) != 1:
+            return None
+        central = centrales[0]
+
+        ramas = []
+        for union in (a, b):
+            pares = []
+            for tub in union.tuberias:
+                if tub is central:
+                    continue
+                otro = tub.nodo_destino if tub.nodo_origen is union else tub.nodo_origen
+                if not isinstance(otro, TanqueGrafico):
+                    return None
+                pares.append((tub, otro))
+            if len(pares) < 2:
+                return None
+            ramas.append(pares)
+        return central, ramas[0], ramas[1]
+
+    def _resolver_doble_nudo(self, j, k):
+        self._perfiles_calculados = {}
+        MotorFluidos.limpiar_iteraciones()
+        limpiar_sentido_flujo_escena(getattr(getattr(self, "canvas_view", None), "scene", lambda: None)())
+        estructura = self._estructura_doble_nudo(j, k)
+        if estructura is None:
+            self.texto_resultados.setPlainText(
+                "Doble Nudo incompleto."
+            )
+            return
+        central, ramas_j, ramas_k = estructura
+
+        rho, mu = self.fluido_rho, self.fluido_mu
+        gamma = rho * MotorFluidos.g
+
+        def tramo(tuberia, tanque, nudo):
+            L_si, D_si, eps_si = self._datos_si(tuberia)
+            P = 0.0 if tanque.abierto_atmosfera else tanque.presion_P
+            return {
+                "tuberia": tuberia,
+                "H": tanque.elevacion_z + P / gamma,
+                "L": L_si,
+                "D": D_si,
+                "eps": eps_si,
+                "K": tuberia.sumatoria_K,
+                "LeD": tuberia.sumatoria_Le_D,
+                "id_nudo": nudo.id_union,
+            }
+
+        try:
+            tramos_j = [tramo(t, tq, j) for t, tq in ramas_j]
+            tramos_k = [tramo(t, tq, k) for t, tq in ramas_k]
+            L_c, D_c, eps_c = self._datos_si(central)
+            tubo_central = {
+                "tuberia": central,
+                "L": L_c,
+                "D": D_c,
+                "eps": eps_c,
+                "K": central.sumatoria_K,
+                "LeD": central.sumatoria_Le_D,
+            }
+        except (ValueError, ZeroDivisionError):
+            self.texto_resultados.setPlainText("Faltan datos. Verifica L y D.")
+            return
+
+        H_manual = j.energia_supuesta if j.energia_supuesta > 0 else None
+
+        try:
+            resultado_red = MotorFluidos.resolver_doble_nudo(
+                tramos_j, tubo_central, tramos_k, rho, mu, H_manual
+            )
+            resultado_red.verificar()
+            H_j, H_k, error_k, resultados = resultado_red
+        except (ValueError, ZeroDivisionError) as error:
+            self.texto_resultados.setPlainText(f"Error de cálculo.\n\nDetalle: {error}")
+            return
+
+        hf_por_tuberia = {id(t["tuberia"]): abs(t["H"] - H_j) for t in tramos_j}
+        hf_por_tuberia.update({id(t["tuberia"]): abs(t["H"] - H_k) for t in tramos_k})
+        hf_por_tuberia[id(central)] = abs(H_j - H_k)
+
+        filas_cad = []
+        filas_flujo = []
+        entradas = {j: [], k: []}
+        salidas = {j: [], k: []}
+        items_export = []
+        hf_tot_dn = hf_dist_dn = hf_acc_dn = hf_bordes_dn = 0.0
+
+        for res in resultados:
+            tub = res["tuberia"]
+            Q_ui = self._desde_si(res["Q"], tub.u_Q)
+            tub.caudal_Q = Q_ui
+            if tub is central:
+                rol = "central"
+            else:
+                nudo_eval = j if any(t["tuberia"] is tub for t in tramos_j) else k
+                rol = "j" if nudo_eval is j else "k"
+            hf_t = hf_por_tuberia[id(tub)]
+            items_export.append((tub, res["Q"], hf_t, None, None, rol))
+            tub.actualizar_texto_hf(hf_t)
+            if self.tuberia_seleccionada is tub and "Q" in self.campos_tuberia:
+                self.campos_tuberia["Q"].setText(str(Q_ui))
+            tub._q_por_energia = True
+
+            try:
+                _, h_d_i, h_l_i = self._hf_tuberia(tub, res["Q"], registrar=False)
+                h_acc_i, h_brd_i = desglosar_perdidas_tuberia(tub, h_l_i)
+                hf_dist_dn += h_d_i
+                hf_acc_dn += h_acc_i
+                hf_bordes_dn += h_brd_i
+            except Exception:
+                hf_dist_dn += hf_t
+            hf_tot_dn += hf_t
+
+            q_str = f"Q{tub.id_tuberia}" if tub.id_tuberia is not None else "Q"
+            if tub is central:
+                if res["direccion"] == "De j a k":
+                    salidas[j].append(q_str)
+                    entradas[k].append(q_str)
+                    flujo = f"De {j.nombre} a {k.nombre}"
+                    nodo_ori_flujo = j
+                else:
+                    entradas[j].append(q_str)
+                    salidas[k].append(q_str)
+                    flujo = f"De {k.nombre} a {j.nombre}"
+                    nodo_ori_flujo = k
+                if res["Q"] > 0:
+                    aplicar_sentido_flujo_ruta(nodo_ori_flujo, [central], signo=1)
+                else:
+                    asignar_sentido_flujo(central, 0)
+            else:
+                nudo = j if any(t["tuberia"] is tub for t in tramos_j) else k
+                if res["direccion"].startswith("Entra"):
+                    entradas[nudo].append(q_str)
+                    flujo = f"Entra a {nudo.nombre}"
+                    signo_ext = -1
+                else:
+                    salidas[nudo].append(q_str)
+                    flujo = f"Sale de {nudo.nombre}"
+                    signo_ext = 1
+                aplicar_sentido_flujo_ruta(nudo, [tub], signo=(signo_ext if res["Q"] > 0 else 0))
+
+            fila_c, _ = self._fila_tabla_cad_tuberia(tub, res["Q"], hf_t)
+            filas_cad.append(fila_c)
+            filas_flujo.append([tub.nombre, rpt_num(f"{Q_ui:.4f} {tub.u_Q}"), flujo])
+
+        lineas_ecuacion = []
+        for nudo in (j, k):
+            txt_in = " + ".join(entradas[nudo]) if entradas[nudo] else "0"
+            txt_out = " + ".join(salidas[nudo]) if salidas[nudo] else "0"
+            lineas_ecuacion.append(f"{nudo.nombre}: {txt_in} = {txt_out}")
+
+        equilibrado = True if H_manual is None else (abs(error_k) < 1e-8)
+        sub_hj = "Tanteo Manual" if H_manual is not None else "Automático"
+        ec_corta = f"{ ' + '.join(entradas[k]) or '0' } = { ' + '.join(salidas[k]) or '0' }"
+        kpis = rpt_grid_2x2(
+            [
+                ("ALTURA EN J (Hj)", "📍", f"{H_j:.2f}", "m", sub_hj, "#0284c7"),
+                ("ALTURA EN K (Hk)", "📍", f"{H_k:.2f}", "m", "Obtenida en 2do nudo", "#0284c7"),
+                (
+                    "VARIACIÓN ΔQ",
+                    "⚖",
+                    f"{error_k:+.4f}",
+                    "m³/s",
+                    "Conservación de masa",
+                    RPT_VERDE if equilibrado else RPT_ROJO,
+                ),
+                ("CONTINUIDAD", "✓", ec_corta, "", f"En {k.nombre}", "#64748b"),
+            ]
+        )
+
+        if H_manual is not None:
+            if equilibrado:
+                estado = rpt_estado(
+                    "ok",
+                    "¡Equilibrio físico alcanzado!",
+                    f"El sistema cumple la ecuación de continuidad en {k.nombre} (ΔQ ≈ 0).",
+                )
+            else:
+                consejo = "AUMENTA" if error_k > 0 else "DISMINUYE"
+                estado = rpt_estado(
+                    "error",
+                    "INCONSISTENCIA FÍSICA",
+                    f"Desequilibrio en {k.nombre} (ΔQ): <b>{error_k:+.6g} m³/s</b><br>"
+                    "Este resultado es <b>ERRÓNEO</b> porque viola la conservación de masa. "
+                    f"<b>{consejo}</b> el valor de Hj y vuelve a calcular.",
+                )
+        else:
+            estado = rpt_estado(
+                "ok",
+                "Doble Nudo en equilibrio",
+                f"Alturas piezométricas: <b>H<sub>J</sub> = {H_j:.4f} m</b> y "
+                f"<b>H<sub>K</sub> = {H_k:.4f} m</b> (ΔQ ≈ 0).",
+            )
+
+        html = (
+            kpis
+            + estado
+            + rpt_seccion_cad("PÉRDIDAS POR TRAMO", "UNIDADES SI")
+            + rpt_tabla(
+                filas_cad,
+                ["RAMAL", "Q (M³/S)", "V (M/S)", "F (C-W)", "HF FRIC. (M)"],
+                ["left", "right", "right", "right", "right"],
+            )
+            + rpt_seccion_cad("SENTIDO DE FLUJO Y CONTINUIDAD", "BALANCE")
+            + rpt_tabla(filas_flujo, ["TUBERÍA", "CAUDAL Q", "SENTIDO"], ["left", "right", "left"])
+            + rpt_ecuaciones(lineas_ecuacion)
+        )
+
+        self.texto_resultados.setHtml(html)
+        self._actualizar_barra_perdidas(hf_tot_dn, hf_dist_dn, hf_acc_dn, hf_bordes_dn)
+
+        # Construir series longitudinales desde el reservorio de mayor cota a cada destino
+        pares_todos = [(t_dict, tq, j) for t_dict, (_, tq) in zip(tramos_j, ramas_j)] + [
+            (t_dict, tq, k) for t_dict, (_, tq) in zip(tramos_k, ramas_k)
+        ]
+        tramo_max, tq_max, nudo_max = max(pares_todos, key=lambda item: item[0]["H"])
+        tramo_min, tq_min, _ = min(pares_todos, key=lambda item: item[0]["H"])
+        rutas_dn = []
+        alturas_nudos = {j:H_j,k:H_k}
+        fuentes = [p for p in pares_todos if p[0]['H']>alturas_nudos[p[2]]]
+        salidas_perfil = [p for p in pares_todos if p[0]['H']<=alturas_nudos[p[2]]]
+        for t_ini,tq_ini,nudo_ini in fuentes:
+            for t_dest,tq_dest,nudo_dest in salidas_perfil:
+                if nudo_dest is not nudo_ini and alturas_nudos[nudo_ini]<alturas_nudos[nudo_dest]:
+                    continue  # No hay ruta de flujo contra el sentido del tramo central.
+                ruta = [t_ini['tuberia']]+([central] if nudo_dest is not nudo_ini else [])+[t_dest['tuberia']]
+                t_ref = t_ini if len(salidas_perfil) == 1 and len(fuentes) > 1 else t_dest
+                rutas_dn.append(dict(tuberias=ruta,tanque_ini=tq_ini,tanque_fin=tq_dest,
+                    color=t_ref['tuberia'].pen().color().name(),tub_referencia=t_ref['tuberia']))
+        series_dn = self._construir_series_rutas_egl(rutas_dn)
+        if hasattr(self, "lbl_egl_subtitle"):
+            self.lbl_egl_subtitle.setText(
+                f"Doble nudo · {j.nombre} – {k.nombre}"
+            )
+        self.egl_chart.actualizar_datos(
+            series_dn,
+            resumen={
+                "z1": tq_max.elevacion_z,
+                "z2": tq_min.elevacion_z,
+                "hf_total": hf_tot_dn,
+                "excedente": H_j,
+                "sub_z1": f"{tq_max.nombre} (Mayor cota)",
+                "sub_z2": f"{tq_min.nombre} (Menor cota)",
+                "sub_hf": "Suma de tramos en red",
+                "tit_exc": "ENERGÍA EN NUDO J (HJ)",
+                "sub_exc": f"H_K = {H_k:.2f} m · Equilibrio" if equilibrado else "Desequilibrio en red",
+                "col_exc": "#006398" if equilibrado else "#ba1a1a",
+            },
+        )
+
+        if H_manual is not None:
+            suposiciones_export = {"H_j (Supuesta)": H_j}
+            calculos_globales = {"H_k (Calculada)": H_k}
+        else:
+            suposiciones_export = {}
+            calculos_globales = {"H_j (Calculada)": H_j, "H_k (Calculada)": H_k}
+
+        self._registrar_exportacion(
+            "Sistema Ramificado (Doble Nudo)",
+            items_export,
+            suposiciones_export,
+            lineas_ecuacion,
+            error_k,
+            self._recomendacion_continuidad(error_k),
+            calculos_globales=calculos_globales
+        )
+
+        j.hj_calculada = float(H_j)
+        k.hj_calculada = float(H_k)
+        j.actualizar_etiqueta()
+        k.actualizar_etiqueta()
+
+    def _resolver_union_ramificada(self, union):
+        self._perfiles_calculados = {}
+        MotorFluidos.limpiar_iteraciones()
+        limpiar_sentido_flujo_escena(getattr(getattr(self, "canvas_view", None), "scene", lambda: None)())
+        analisis = self._analizar_red_union(union)
+        if not analisis.get("valida"):
+            self.texto_resultados.setPlainText(f"Unión incompleta: {analisis.get('mensaje')}.")
+            return
+
+        if analisis["tipo"] == "bomba_ramificada":
+            self._resolver_bomba_en_red_ramificada(union, analisis)
+            return
+
+        tanques = analisis["tanques"]
+
+        rho, mu = self.fluido_rho, self.fluido_mu
+        gamma = rho * MotorFluidos.g
+
+        tramos = []
+        try:
+            for rama in analisis['ramas']:
+                tuberia, tanque = rama['tuberia_directa'], rama['tanque']
+                segmentos = self._segmentos_ramal_si(rama)
+                P = 0.0 if tanque.abierto_atmosfera else tanque.presion_P
+                tramos.append(
+                    {
+                        "tuberia": tuberia,
+                        "H": tanque.elevacion_z + P / gamma,
+                        "segmentos": segmentos,
+                    }
+                )
+        except (ValueError, ZeroDivisionError):
+            self.texto_resultados.setPlainText("Faltan datos. Verifica L y D.")
+            return
+
+        H_manual = union.energia_supuesta if union.energia_supuesta > 0 else None
+
+        try:
+            resultado_red = MotorFluidos.resolver_red_ramificada(
+                tramos, rho, mu, H_manual
+            )
+            resultado_red.verificar()
+            H_j, error_Q, resultados = resultado_red
+        except (ValueError, ZeroDivisionError) as error:
+            self.texto_resultados.setPlainText(f"Error de cálculo.\n\nDetalle: {error}")
+            return
+
+        filas_cad = []
+        filas_flujo = []
+        entradas = []
+        salidas = []
+        items_export = []
+        q_entrante_si = 0.0
+        hf_tot_ram = hf_dist_ram = hf_acc_ram = hf_bordes_ram = 0.0
+
+        for res in resultados:
+            ramal = next(t for t in tramos if t['tuberia'] is res['tuberia'])
+            ruta_seg = [s['tuberia'] for s in ramal['segmentos']]
+            for segmento in ramal['segmentos']:
+                tub = segmento['tuberia']
+                hf, h_d_i, h_l_i = MotorFluidos._perdida_tramo(res['Q'], segmento, rho, mu)
+                self._guardar_resultado_tuberia(tub, res['Q'], hf, por_energia=True,
+                                                hf_dist=h_d_i, hf_loc=h_l_i)
+                items_export.append((tub, res['Q'], hf))
+                hf_tot_ram += hf
+                hf_dist_ram += h_d_i
+                h_acc_i, h_brd_i = desglosar_perdidas_tuberia(tub, h_l_i)
+                hf_acc_ram += h_acc_i
+                hf_bordes_ram += h_brd_i
+                fila_c, _ = self._fila_tabla_cad_tuberia(tub, res['Q'], hf)
+                filas_cad.append(fila_c)
+                filas_flujo.append([tub.nombre, rpt_num(f"{tub.caudal_Q:.4f} {tub.u_Q}"), res['direccion']])
+            if res['Q'] <= 0:
+                for seg_t in ruta_seg:
+                    asignar_sentido_flujo(seg_t, 0)
+            else:
+                aplicar_sentido_flujo_ruta(
+                    union,
+                    ruta_seg,
+                    signo=(-1 if res['direccion'] == 'Entra a la unión' else 1),
+                )
+            tub = res['tuberia']
+            q_str = f"Q{tub.id_tuberia}" if tub.id_tuberia is not None else "Q"
+            if res['direccion'] == 'Entra a la unión':
+                entradas.append(q_str)
+                q_entrante_si += res['Q']
+            else:
+                salidas.append(q_str)
+
+        txt_in = " + ".join(entradas) if entradas else "0"
+        txt_out = " + ".join(salidas) if salidas else "0"
+        ecuacion = f"{txt_in} = {txt_out}"
+
+        equilibrado = True if H_manual is None else (abs(error_Q) < 1e-8)
+        sub_hj = "Tanteo Manual" if H_manual is not None else "Automático"
+        kpis = rpt_grid_2x2(
+            [
+                ("ALTURA EN J (Hj)", "📍", f"{H_j:.2f}", "m", sub_hj, "#0284c7"),
+                (
+                    "ΣQ ENTRANTE",
+                    "≈",
+                    f"{q_entrante_si:.4f}",
+                    "m³/s",
+                    f"{q_entrante_si * 1000.0:.2f} L/s",
+                    "#0284c7",
+                ),
+                (
+                    "VARIACIÓN ΔQ",
+                    "⚖",
+                    f"{error_Q:+.4f}",
+                    "m³/s",
+                    "Conservación de masa",
+                    RPT_VERDE if equilibrado else RPT_ROJO,
+                ),
+                ("CONTINUIDAD", "✓", ecuacion, "", f"En {union.nombre}", "#64748b"),
+            ]
+        )
+
+        if H_manual is not None:
+            if equilibrado:
+                estado = rpt_estado(
+                    "ok",
+                    "¡Equilibrio físico alcanzado!",
+                    "El sistema cumple la ecuación de continuidad (ΔQ ≈ 0).",
+                )
+            else:
+                consejo = "AUMENTA" if error_Q > 0 else "DISMINUYE"
+                estado = rpt_estado(
+                    "error",
+                    "INCONSISTENCIA FÍSICA",
+                    f"Desequilibrio (ΔQ): <b>{error_Q:+.6g} m³/s</b><br>"
+                    f"<b>{consejo}</b> el valor de la altura piezométrica Hj y vuelve a calcular.",
+                )
+        else:
+            estado = rpt_estado(
+                "ok",
+                "Red de 3 reservorios en equilibrio",
+                f"Altura piezométrica en la unión: <b>H<sub>J</sub> = {H_j:.4f} m</b> (ΔQ ≈ 0).",
+            )
+
+        html = (
+            kpis
+            + estado
+            + rpt_seccion_cad("PÉRDIDAS POR TRAMO", "UNIDADES SI")
+            + rpt_tabla(
+                filas_cad,
+                ["RAMAL", "Q (M³/S)", "V (M/S)", "F (C-W)", "HF FRIC. (M)"],
+                ["left", "right", "right", "right", "right"],
+            )
+            + rpt_seccion_cad("SENTIDO DE FLUJO", "BALANCE EN NUDO")
+            + rpt_tabla(filas_flujo, ["TUBERÍA", "CAUDAL Q", "FLUJO"], ["left", "right", "left"])
+        )
+
+        self.texto_resultados.setHtml(html)
+        self._actualizar_barra_perdidas(hf_tot_ram, hf_dist_ram, hf_acc_ram, hf_bordes_ram)
+
+        pares_ram = list(zip(tramos, tanques))
+        tramo_max_r, tq_max_r = max(pares_ram, key=lambda item: item[0]["H"])
+        tramo_min_r, tq_min_r = min(pares_ram, key=lambda item: item[0]["H"])
+        union.hj_calculada = H_j
+        rutas_ram = []
+        fuentes = [(t,tq) for t,tq in pares_ram if t['H']>H_j]
+        salidas_perfil = [(t,tq) for t,tq in pares_ram if t['H']<=H_j]
+        for t_ini,tq_ini in fuentes:
+            for t_dest,tq_dest in salidas_perfil:
+                ruta = [s['tuberia'] for s in reversed(t_ini['segmentos'])]+[s['tuberia'] for s in t_dest['segmentos']]
+                t_ref = t_ini if len(salidas_perfil) == 1 and len(fuentes) > 1 else t_dest
+                rutas_ram.append(dict(tuberias=ruta,tanque_ini=tq_ini,tanque_fin=tq_dest,
+                    color=t_ref['tuberia'].pen().color().name(),tub_referencia=t_ref['tuberia']))
+        series_ram = self._construir_series_rutas_egl(rutas_ram)
+        if hasattr(self, "lbl_egl_subtitle"):
+            self.lbl_egl_subtitle.setText(
+                f"Red ramificada · {union.nombre}"
+            )
+        self.egl_chart.actualizar_datos(
+            series_ram,
+            resumen={
+                "z1": tq_max_r.elevacion_z,
+                "z2": tq_min_r.elevacion_z,
+                "hf_total": hf_tot_ram,
+                "excedente": H_j,
+                "sub_z1": f"{tq_max_r.nombre} (Mayor cota)",
+                "sub_z2": f"{tq_min_r.nombre} (Menor cota)",
+                "sub_hf": "Fricción + Accesorios + Bordes",
+                "tit_exc": "ENERGÍA EN UNIÓN (HJ)",
+                "sub_exc": "Flujo en equilibrio (ΔQ ≈ 0)" if equilibrado else "Desequilibrio en nudo",
+                "col_exc": "#006398" if equilibrado else "#ba1a1a",
+            },
+        )
+        if H_manual is not None:
+            suposiciones_export = {"H_j (Supuesta)": H_j}
+            calculos_globales = {}
+        else:
+            suposiciones_export = {}
+            calculos_globales = {"H_j (Calculada)": H_j}
+
+        self._registrar_exportacion(
+            "Sistema Ramificado",
+            items_export,
+            suposiciones_export,
+            [ecuacion],
+            error_Q,
+            self._recomendacion_continuidad(error_Q),
+            calculos_globales=calculos_globales
+        )
+
+        union.hj_calculada = H_j
+        union.actualizar_etiqueta()
+
+    def _resolver_bomba_en_red_ramificada(self, union, analisis):
+        """
+        Resuelve una red ramificada donde la rama principal está impulsada por una bomba centrífuga.
+        """
+        MotorFluidos.limpiar_iteraciones()
+        limpiar_sentido_flujo_escena(getattr(getattr(self, "canvas_view", None), "scene", lambda: None)())
+        actual = self._analizar_red_union(union)
+        if not actual.get('valida') or actual.get('tipo') != 'bomba_ramificada':
+            mensaje = f"Topología no soportada: {actual.get('mensaje', 'no es una red ramificada con una bomba')}."
+            if analisis.get('bomba') is not None:
+                self._limpiar_resultados_bomba(analisis['bomba'], estado='TOPOLOGIA_NO_SOPORTADA', mensaje=mensaje)
+            self.datos_exportacion = {}
+            self.texto_resultados.setPlainText(mensaje)
+            return
+        analisis = actual
+        bomba = analisis["bomba"]
+        tanque_bomba = analisis["tanque_bomba"]
+        tuberias_bomba = analisis["tuberias_bomba"]
+        ramas_tanques = analisis["ramas_tanques"]
+
+        # 1. Comprobar equipos y curvas de la bomba
+        equipos = getattr(bomba, "equipos", [])
+        if equipos:
+            sin_curva = any(eq.get("curva") is None for eq in equipos)
+            if sin_curva or not getattr(bomba, "curvas", []):
+                msg = "Falta ingresar la curva de la bomba"
+                if hasattr(self, "_mostrar_diagnostico_bomba"):
+                    self._mostrar_diagnostico_bomba(bomba, "SIN_CURVA", msg)
+                self.texto_resultados.setPlainText(f"Error en {bomba.nombre}: {msg}.")
+                return
+            lista_curvas = [eq["curva"] for eq in equipos]
+        else:
+            if not getattr(bomba, "curvas", []):
+                msg = "Falta ingresar la curva de la bomba"
+                if hasattr(self, "_mostrar_diagnostico_bomba"):
+                    self._mostrar_diagnostico_bomba(bomba, "SIN_CURVA", msg)
+                self.texto_resultados.setPlainText(f"Error en {bomba.nombre}: {msg}.")
+                return
+            lista_curvas = list(bomba.curvas)
+
+        metodo_estacion = getattr(bomba, "metodo", "cuadratico")
+        if str(getattr(bomba, "arreglo", "individual")).lower() == "serie":
+            estacion = EstacionBombeo.en_serie(lista_curvas, metodo=metodo_estacion)
+        else:
+            estacion = EstacionBombeo.en_paralelo(lista_curvas, metodo=metodo_estacion)
+
+        rho, mu = self.fluido_rho, self.fluido_mu
+        gamma = rho * MotorFluidos.g
+
+        # 2. Extraer datos SI de la conducción de la bomba (en sentido tanque -> bomba -> nudo J)
+        if len(tuberias_bomba) > 1:
+            t_ini = tuberias_bomba[0]
+            t_fin = tuberias_bomba[-1]
+            if (t_fin.nodo_origen is tanque_bomba or t_fin.nodo_destino is tanque_bomba) and not (
+                t_ini.nodo_origen is tanque_bomba or t_ini.nodo_destino is tanque_bomba
+            ):
+                tuberias_bomba = list(reversed(tuberias_bomba))
+
+        try:
+            sub_tramos = []
+            nodo_curr = tanque_bomba
+            en_succion = nodo_curr is not bomba
+            for idx_t, tub in enumerate(tuberias_bomba):
+                if idx_t == 0 and (tub.nodo_origen is bomba or tub.nodo_destino is bomba) and not (
+                    tub.nodo_origen is tanque_bomba or tub.nodo_destino is tanque_bomba
+                ):
+                    en_succion = False
+                L_si, D_si, eps_si = self._datos_si(tub)
+                sub_tramos.append({
+                    "tuberia": tub,
+                    "L": L_si,
+                    "D": D_si,
+                    "eps": eps_si,
+                    "K": tub.sumatoria_K,
+                    "LeD": tub.sumatoria_Le_D,
+                    "es_succion": en_succion,
+                })
+                nodo_sig = tub.nodo_destino if tub.nodo_origen is nodo_curr else tub.nodo_origen
+                if nodo_sig is bomba:
+                    en_succion = False
+                nodo_curr = nodo_sig
+            P1 = 0.0 if tanque_bomba.abierto_atmosfera else tanque_bomba.presion_P
+            H1 = tanque_bomba.elevacion_z + P1 / gamma
+            tramo_bomba = {
+                "tuberia": tuberias_bomba[0],
+                "H": H1,
+                "z_bomba": getattr(bomba, "z_bomba", 0.0),
+                "sub_tramos": sub_tramos,
+                "bomba_obj": bomba,
+            }
+
+            # 3. Extraer datos SI de cada ramal conectado a j
+            tramos_ramales = []
+            for r in ramas_tanques:
+                tq = r["tanque"]
+                tub = r["tuberia_directa"]
+                P_tq = 0.0 if tq.abierto_atmosfera else tq.presion_P
+                H_tq = tq.elevacion_z + P_tq / gamma
+                segmentos = self._segmentos_ramal_si(r)
+                nom_ramal = f"Q{tub.id_tuberia}" if tub.id_tuberia is not None else tub.nombre
+                tramos_ramales.append({
+                    "tuberia": tub,
+                    "tanque": tq,
+                    "H": H_tq,
+                    "segmentos": segmentos,
+                    "id_ramal": nom_ramal,
+                })
+        except (ValueError, ZeroDivisionError) as e:
+            self.texto_resultados.setPlainText(f"Faltan datos en tuberías: {e}")
+            return
+
+        # Modo tanteo si se especificó caudal supuesto en la unión
+        Q_manual = getattr(union, "caudal_supuesto", None)
+        if Q_manual is not None and Q_manual <= 0:
+            Q_manual = None
+
+        try:
+            res = MotorFluidos.resolver_bomba_ramificada(
+                estacion, tramo_bomba, tramos_ramales, rho=rho, mu=mu, Q_manual=Q_manual,
+                P_atm=getattr(self,'fluido_P_atm',None), P_vap=getattr(self,'fluido_P_vap',None), generar_curva=False
+            )
+        except Exception as error:
+            self.texto_resultados.setPlainText(f"Error de cálculo: {error}")
+            return
+
+        if not res.convergio:
+            if hasattr(self, "_mostrar_diagnostico_bomba"):
+                self._mostrar_diagnostico_bomba(bomba, res.estado, res.mensaje)
+            self.texto_resultados.setPlainText(f"{res.estado}:\n{res.mensaje}")
+            return
+
+        # 4. Actualizar resultados en BombaGrafica
+        self._aplicar_resultado_estacion(bomba, res.estacion_resultado)
+
+        # 5. Actualizar caudales y pérdidas en tuberías
+        filas_cad = []
+        filas_flujo = []
+        entradas_cont = []
+        salidas_cont = []
+        items_export = []
+        hf_tot = hf_dist = hf_acc = hf_bordes = 0.0
+
+        nom_qb = f"Q{tuberias_bomba[0].id_tuberia}" if tuberias_bomba[0].id_tuberia is not None else "Q_B"
+        entradas_cont.append(nom_qb)
+
+        for tub, resultado in zip(tuberias_bomba, res.resultados_tramos_principal):
+            Q_ui = self._desde_si(res.Q_bomba, tub.u_Q)
+            tub.caudal_Q = Q_ui
+            hf_t, hf_d_t, hf_l_t = resultado.hf_total, resultado.hf_distribuida, resultado.hf_localizada
+            self._guardar_resultado_tuberia(tub, res.Q_bomba, hf_t, por_energia=True,
+                                            hf_dist=hf_d_t, hf_loc=hf_l_t, resultado_tramo=resultado)
+            items_export.append((tub, res.Q_bomba, hf_t))
+            fila_c, _ = self._fila_tabla_cad_tuberia(tub, res.Q_bomba, hf_t)
+            filas_cad.append(fila_c)
+            filas_flujo.append([tub.nombre, rpt_num(f"{Q_ui:.4f} {tub.u_Q}"), f"Impulsión hacia {union.nombre}"])
+            hf_tot += hf_t
+            hf_dist += hf_d_t
+            h_acc_t, h_brd_t = desglosar_perdidas_tuberia(tub, hf_l_t, resultado)
+            hf_acc += h_acc_t
+            hf_bordes += h_brd_t
+            if self.tuberia_seleccionada is tub and "Q" in self.campos_tuberia:
+                self.campos_tuberia["Q"].setText(str(Q_ui))
+            tub._q_por_energia = True
+
+        aplicar_sentido_flujo_ruta(tanque_bomba, tuberias_bomba, signo=(1 if res.Q_bomba > 0 else 0))
+
+        for r_rama, r_res in zip(tramos_ramales, res.resultados_ramales):
+            q_si = r_res['Q']
+            q_id = r_rama['id_ramal']
+            if r_res['sentido'] == 'sale':
+                salidas_cont.append(q_id)
+                flujo_txt = f"Hacia {r_rama['tanque'].nombre}"
+            else:
+                entradas_cont.append(q_id)
+                flujo_txt = f"Desde {r_rama['tanque'].nombre} hacia {union.nombre}"
+            ruta_seg = [seg['tuberia'] for seg in r_rama['segmentos']]
+            for segmento, resultado in zip(r_rama['segmentos'], r_res['resultados_tramos']):
+                tub = segmento['tuberia']
+                hf_t, hf_d_t, hf_l_t = resultado.hf_total, resultado.hf_distribuida, resultado.hf_localizada
+                self._guardar_resultado_tuberia(tub, q_si, hf_t, por_energia=True,
+                                                hf_dist=hf_d_t, hf_loc=hf_l_t, resultado_tramo=resultado)
+                items_export.append((tub, q_si, hf_t))
+                hf_tot += hf_t
+                hf_dist += hf_d_t
+                h_acc_t, h_brd_t = desglosar_perdidas_tuberia(tub, hf_l_t, resultado)
+                hf_acc += h_acc_t
+                hf_bordes += h_brd_t
+                fila_c, _ = self._fila_tabla_cad_tuberia(tub, q_si, hf_t)
+                filas_cad.append(fila_c)
+                filas_flujo.append([tub.nombre, rpt_num(f"{tub.caudal_Q:.4f} {tub.u_Q}"), flujo_txt])
+            if q_si <= 0:
+                for seg_t in ruta_seg:
+                    asignar_sentido_flujo(seg_t, 0)
+            else:
+                aplicar_sentido_flujo_ruta(
+                    union,
+                    ruta_seg,
+                    signo=(1 if r_res['sentido'] == 'sale' else -1),
+                )
+
+        union.hj_calculada = float(res.H_j)
+        union.actualizar_etiqueta()
+
+        txt_in = " + ".join(entradas_cont) if entradas_cont else "0"
+        txt_out = " + ".join(salidas_cont) if salidas_cont else "0"
+        ec_cont = f"{txt_in} = {txt_out}"
+
+        # 6. Reporte HTML
+        equilibrado = res.convergio
+        kpis = rpt_grid_2x2(
+            [
+                ("ALTURA EN J (Hj)", "📍", f"{res.H_j:.2f}", "m", "Cota piezométrica", "#0284c7"),
+                ("BOMBA (Qop, Hop)", "⚙", f"{res.Q_bomba:.4f}", "m³/s", f"H_B = {res.H_bomba:.2f} m", "#0284c7"),
+                (
+                    "VARIACIÓN ΔQ",
+                    "⚖",
+                    f"{res.error_Q:+.5f}",
+                    "m³/s",
+                    "Continuidad en nudo",
+                    RPT_VERDE if equilibrado else RPT_ROJO,
+                ),
+                ("CONTINUIDAD", "✓", ec_cont, "", f"En {union.nombre}", "#64748b"),
+            ]
+        )
+
+        estado_html = rpt_estado(
+            "ok" if equilibrado else "aviso",
+            "Bomba en Red Ramificada: Equilibrio Alcanzado" if equilibrado else "Desequilibrio en Red Ramificada",
+            (
+                f"Punto de operación: <b>Q = {res.Q_bomba:.4f} m³/s</b> ({res.Q_bomba*1000:.1f} L/s), "
+                f"<b>H = {res.H_bomba:.2f} m</b>. Cota piezométrica en {union.nombre}: <b>H<sub>J</sub> = {res.H_j:.2f} m</b>.<br>"
+                f"Balance de caudales: <b>{ec_cont}</b> (ΔQ = {res.error_Q:+.2e} m³/s)."
+            ),
+        )
+
+        filas_bomba = [
+            ["Carga Manométrica (H_B)", f"{res.H_bomba:.2f} m"],
+            ["Caudal de Impulsión (Q_B)", f"{res.Q_bomba:.4f} m³/s ({res.Q_bomba*1000:.2f} L/s)"],
+            ["Potencia Hidráulica", f"{res.potencia_hidraulica/1000.0:.2f} kW" if res.potencia_hidraulica else "N/D"],
+            ["Rendimiento (η)", f"{res.eta*100.0:.1f} %" if res.eta is not None else "—"],
+            ["Potencia al Freno (BHP)", f"{res.potencia_freno/1000.0:.2f} kW" if res.potencia_freno is not None else "—"],
+            ["NPSH Disponible", f"{res.npsh_d:.2f} m" if res.npsh_d is not None else "N/D"],
+            ["Cavitación", str(bomba.cavitacion or "No verificable")],
+        ]
+
+        html = (
+            kpis
+            + estado_html
+            + rpt_seccion_cad("PÉRDIDAS POR TRAMO", "UNIDADES SI")
+            + rpt_tabla(
+                filas_cad,
+                ["RAMAL", "Q (M³/S)", "V (M/S)", "F (C-W)", "HF FRIC. (M)"],
+                ["left", "right", "right", "right", "right"],
+            )
+            + rpt_seccion_cad("SENTIDO DE FLUJO Y CONTINUIDAD", "BALANCE EN NUDO")
+            + rpt_tabla(filas_flujo, ["TUBERÍA", "CAUDAL Q", "SENTIDO"], ["left", "right", "left"])
+            + rpt_seccion_cad("PARÁMETROS DE OPERACIÓN DE LA BOMBA", bomba.nombre.upper())
+            + rpt_tabla(filas_bomba, ["PARÁMETRO", "VALOR"], ["left", "right"])
+            + rpt_seccion_cad("NPSH POR BOMBA", "ASPIRACIÓN DE CADA ETAPA")
+            + rpt_tabla([[str(d.id),str(d.etapa),
+                f"{d.NPSHd:.3f}" if d.NPSHd is not None else '—',
+                f"{d.NPSHr:.3f}" if d.NPSHr is not None else '—',d.cavitacion]
+                for d in res.estacion_resultado.bombas], ['BOMBA','ETAPA','NPSHD (M)','NPSHR (M)','ESTADO'])
+        )
+
+        self.texto_resultados.setHtml(html)
+        self._actualizar_barra_perdidas(hf_tot, hf_dist, hf_acc, hf_bordes)
+
+        # 7. Actualizar curvas en pestaña CURVAS
+        def h_sistema_ramificada(q):
+            return evaluar_carga_sistema_ramificada(q,tramo_bomba,tramos_ramales,rho,mu)[0]
+        muestras = construir_curvas_estacion(estacion,h_sistema_ramificada,Q_op=res.Q_bomba)
+
+        self._ultimo_datos_grafico_bombas = dict(
+            **muestras,
+            curvas=lista_curvas,
+            nombres_bombas=[nombre_equipo_bomba(equipos[i] if i<len(equipos) else None,
+                curva=c,indice=i,nombre_estacion=bomba.nombre if len(lista_curvas)==1 else None)
+                for i,c in enumerate(lista_curvas)],
+            curva_eq=estacion,
+            H_sistema=h_sistema_ramificada,
+            Q_op=res.Q_bomba,
+            H_op=res.H_bomba,
+            eta_op=res.eta,
+            arreglo=bomba.arreglo,
+            reparto=[],
+            metodo=metodo_estacion,
+        )
+        if hasattr(self, "grafico_bombas"):
+            self.grafico_bombas.actualizar_datos(**self._ultimo_datos_grafico_bombas)
+
+        # 8. Actualizar perfil longitudinal EGL/HGL
+        rutas_egl = [dict(tuberias=tuberias_bomba+r['tuberias'],tanque_ini=tanque_bomba,
+            tanque_fin=r['tanque'],nombre_serie=f"{tanque_bomba.nombre} → {r['tanque'].nombre} (vía {bomba.nombre})",
+            color=r['tuberia_directa'].pen().color().name(),tub_referencia=r['tuberia_directa']) for r in ramas_tanques]
+        series_egl = self._construir_series_rutas_egl(rutas_egl)
+
+        if hasattr(self, "lbl_egl_subtitle"):
+            self.lbl_egl_subtitle.setText(
+                f"Bomba en red · {bomba.nombre} + {union.nombre}"
+            )
+        if hasattr(self, "egl_chart") and series_egl:
+            self.egl_chart.actualizar_datos(
+                series_egl,
+                resumen={
+                    "z1": tanque_bomba.elevacion_z,
+                    "z2": min(r["tanque"].elevacion_z for r in ramas_tanques),
+                    "hf_total": hf_tot,
+                    "excedente": res.H_j,
+                    "sub_z1": f"{tanque_bomba.nombre} (Succión)",
+                    "sub_z2": "Depósito menor cota",
+                    "sub_hf": "Pérdidas totales del sistema",
+                    "tit_exc": "ENERGÍA EN NUDO J (HJ)",
+                    "sub_exc": f"H_B = {res.H_bomba:.2f} m · Operación equilibrada",
+                    "col_exc": "#006398",
+                },
+            )
+
+        # 9. Guardar para exportación y memoria de cálculo
+        curvas_dict_list = []
+        for i,c in enumerate(lista_curvas):
+            curvas_dict_list.append({
+                "nombre": self._ultimo_datos_grafico_bombas["nombres_bombas"][i],
+                "metodo": c.metodo,
+                "tiene_joroba": bool(getattr(c,"tiene_joroba",False)),
+                "Q": list(getattr(c, "Q", [])),
+                "H": list(getattr(c, "H", [])),
+                "eta": list(c.eta) if getattr(c, "eta", None) else None,
+                "npsh_r": list(c.npsh_r) if getattr(c, "npsh_r", None) else None,
+            })
+
+        bomba_dict = {
+            "nombre": bomba.nombre,
+            "arreglo": bomba.arreglo,
+            "metodo": metodo_estacion,
+            "z_bomba": getattr(bomba, "z_bomba", 0.0),
+            "tanque1": {"nombre": tanque_bomba.nombre, "z": tanque_bomba.elevacion_z, "P": tanque_bomba.presion_P},
+            "tanque2": {"nombre": f"{union.nombre} (Bifurcación)", "z": union.hj_calculada, "P": 0.0},
+            "Q_op": res.Q_bomba,
+            "H_op": res.H_bomba,
+            "eta_op": res.eta,
+            "potencia_hidraulica": res.potencia_hidraulica,
+            "potencia_freno": res.potencia_freno,
+            "npsh_d": bomba.npsh_d,
+            "npsh_r": bomba.npsh_r,
+            "cavitacion": bomba.cavitacion,
+            "reparto": bomba.reparto,
+            "desglose": bomba.reparto,
+            "P_atm": getattr(self,'fluido_P_atm',None),
+            "P_vap": getattr(self,'fluido_P_vap',None),
+            "P1_abs": (self.fluido_P_atm + P1 if getattr(self,'fluido_P_atm',None) is not None else None),
+            "Pv": getattr(self,'fluido_P_vap',None),
+            "rho": rho,
+            "mu": mu,
+            "g": MotorFluidos.g,
+            "hf_succion": res.hf_succion,
+            "curvas": curvas_dict_list,
+            "estacion": estacion,
+            "puntos_egl": series_egl[0]["puntos"] if series_egl else [],
+            "puntos_sistema": muestras["muestras_sistema"],
+            "puntos_equivalente": muestras["muestras_equivalente"],
+            "muestras_bombas": muestras["muestras_bombas"],
+        }
+
+        self.datos_exportacion = {
+            "tipo_sistema": "Bomba en Red Ramificada",
+            "perfiles": [s["perfil"] for s in series_egl],
+            "bomba": bomba_dict,
+            "H_j": res.H_j,
+            "error_Q": res.error_Q,
+            "ecuacion_continuidad": ec_cont,
+            "iteraciones": res.historial,
+            "tuberias": [self._fila_exportacion(t, q, hf) for t, q, hf in items_export],
+            "suposiciones": {},
+            "calculos_globales": {"H_j (Calculada)": res.H_j, "Q_bomba": res.Q_bomba, "H_bomba": res.H_bomba},
+            "condicion_final": [ec_cont],
+            "recomendacion": "EQUILIBRIO: el caudal de bomba abastece la continuidad en el nudo.",
+        }
+
+        if hasattr(self, "boton_excel"):
+            self.boton_excel.show()
+
+    @staticmethod
+    def _s7(valor):
+        return None if valor is None else float(f"{valor:.7g}")
+
+    @staticmethod
+    def _recomendacion_continuidad(error_Q):
+        if abs(error_Q) < 1e-8:
+            return "EQUILIBRIO: el sistema cumple la ecuación de continuidad (ΔQ ≈ 0)."
+        consejo = "AUMENTA" if error_Q > 0 else "DISMINUYE"
+        return f"ERRÓNEO. {consejo} el valor de Hj."
+
+    @staticmethod
+    def _z_tuberia(tuberia):
+        for nodo in (tuberia.nodo_origen, tuberia.nodo_destino):
+            if isinstance(nodo, TanqueGrafico):
+                return nodo.elevacion_z
+        return None
+
+    @staticmethod
+    def _clave_orden_union(union):
+        uid = getattr(union, "id_union", None)
+        return (uid is None, uid if uid is not None else 0, getattr(union, "nombre", ""))
+
+    def _analizar_componente_multinudo(self, union_semilla):
+        """Explora el componente conexo entre tanques desde un nudo de unión."""
+        semilla = union_semilla.nodos[0] if isinstance(union_semilla, RedMultiNudo) else union_semilla
+        if semilla is None:
+            return {"valida": False, "motivo": "nulo", "mensaje": "Nudo de unión no válido."}
+
+        uniones_comp = []
+        accesorios_comp = []
+        bombas_comp = []
+        tuberias_dict = {}
+        internos_vistos = {id(semilla)}
+        puertos_vistos = set()
+        puertos_tanque = []
+        tanques_dict = {}
+
+        cola = [semilla]
+        while cola:
+            actual = cola.pop(0)
+            if isinstance(actual, NodoUnionGrafico):
+                uniones_comp.append(actual)
+            elif isinstance(actual, AccesorioGrafico):
+                accesorios_comp.append(actual)
+            elif isinstance(actual, BombaGrafica):
+                bombas_comp.append(actual)
+
+            for tub in getattr(actual, "tuberias", []):
+                tuberias_dict[id(tub)] = tub
+                ori = getattr(tub, "nodo_origen", None)
+                des = getattr(tub, "nodo_destino", None)
+                if ori is None or des is None:
+                    return {
+                        "valida": False,
+                        "motivo": "incompleta",
+                        "mensaje": f"{getattr(tub, 'nombre', 'Tubería')} no tiene ambos extremos conectados.",
+                    }
+                otro = des if ori is actual else ori
+                if isinstance(otro, TanqueGrafico):
+                    clave_p = (id(tub), id(otro))
+                    if clave_p not in puertos_vistos:
+                        puertos_vistos.add(clave_p)
+                        puertos_tanque.append((tub, otro))
+                        tanques_dict[id(otro)] = otro
+                elif id(otro) not in internos_vistos:
+                    internos_vistos.add(id(otro))
+                    cola.append(otro)
+
+        if bombas_comp:
+            return {
+                "valida": False,
+                "motivo": "bomba",
+                "mensaje": "Las redes multi-nudo con bomba centrífuga aún no están soportadas.",
+            }
+
+        for u in uniones_comp:
+            if len(getattr(u, "tuberias", [])) < 2:
+                return {
+                    "valida": False,
+                    "motivo": "incompleta",
+                    "mensaje": f"{u.nombre} requiere al menos 2 tuberías conectadas.",
+                }
+
+        for acc in accesorios_comp:
+            if len(getattr(acc, "tuberias", [])) != 2:
+                return {
+                    "valida": False,
+                    "motivo": "accesorio",
+                    "mensaje": f"{acc.nombre} debe conectar exactamente 2 tuberías en serie.",
+                }
+
+        tanques_lista = list(tanques_dict.values())
+        if len(tanques_lista) < 3:
+            return {
+                "valida": False,
+                "motivo": "pocos_tanques",
+                "mensaje": "La red ramificada requiere al menos 3 tanques conectados.",
+            }
+
+        # Árbol acíclico estricto: |E| == |V| - 1
+        n_vertices = len(uniones_comp) + len(accesorios_comp) + len(tanques_lista)
+        if len(tuberias_dict) != n_vertices - 1:
+            return {
+                "valida": False,
+                "motivo": "ciclo",
+                "mensaje": "La red contiene un ciclo o tuberías en paralelo entre múltiples reservorios.",
+            }
+
+        nodos_ramificados = sorted(
+            [u for u in uniones_comp if len(u.tuberias) >= 3],
+            key=self._clave_orden_union,
+        )
+        if not nodos_ramificados:
+            return {
+                "valida": False,
+                "motivo": "sin_ramificacion",
+                "mensaje": "No se detectaron nudos de ramificación (grado ≥ 3).",
+            }
+
+        uniones_serie = sorted(
+            [u for u in uniones_comp if len(u.tuberias) == 2],
+            key=self._clave_orden_union,
+        )
+        anclas = list(nodos_ramificados) + tanques_lista
+        anclas_ids = {id(a) for a in anclas}
+
+        macros_vistos = set()
+        tramos_macro = []
+        for ancla in anclas:
+            for tub_0 in getattr(ancla, "tuberias", []):
+                if id(tub_0) not in tuberias_dict:
+                    continue
+                camino_tubs = [tub_0]
+                nodos_serie = []
+                curr = ancla
+                curr_tub = tub_0
+                nxt = curr_tub.nodo_destino if curr_tub.nodo_origen is curr else curr_tub.nodo_origen
+                while id(nxt) not in anclas_ids:
+                    if isinstance(nxt, NodoUnionGrafico):
+                        nodos_serie.append(nxt)
+                    sig_list = [t for t in nxt.tuberias if t is not curr_tub]
+                    if len(sig_list) != 1:
+                        return {
+                            "valida": False,
+                            "motivo": "incompleta",
+                            "mensaje": f"Topología inválida alrededor de {getattr(nxt, 'nombre', 'nudo')}.",
+                        }
+                    curr = nxt
+                    curr_tub = sig_list[0]
+                    nxt = curr_tub.nodo_destino if curr_tub.nodo_origen is curr else curr_tub.nodo_origen
+                    camino_tubs.append(curr_tub)
+
+                clave_m = frozenset(id(t) for t in camino_tubs)
+                if clave_m in macros_vistos:
+                    continue
+                macros_vistos.add(clave_m)
+                tramos_macro.append(
+                    {
+                        "origen": ancla,
+                        "destino": nxt,
+                        "tuberias": camino_tubs,
+                        "nodos_serie": nodos_serie,
+                    }
+                )
+
+        es_doble_estricto = (
+            len(nodos_ramificados) == 2
+            and not accesorios_comp
+            and not uniones_serie
+            and self._estructura_doble_nudo(nodos_ramificados[0], nodos_ramificados[1]) is not None
+        )
+
+        return {
+            "valida": True,
+            "nodos_ramificados": nodos_ramificados,
+            "uniones_serie": uniones_serie,
+            "uniones_todas": uniones_comp,
+            "tanques": tanques_lista,
+            "accesorios": accesorios_comp,
+            "tuberias": list(tuberias_dict.values()),
+            "tramos_macro": tramos_macro,
+            "es_unico_nudo": len(nodos_ramificados) == 1,
+            "es_doble_nudo_estricto": es_doble_estricto,
+        }
+
+    def _resolver_red_multinudo(self, red_o_union):
+        """Resuelve cualquier red ramificada en árbol con múltiples nudos y tramos compuestos."""
+        self._perfiles_calculados = {}
+        MotorFluidos.limpiar_iteraciones()
+        limpiar_sentido_flujo_escena(
+            getattr(getattr(self, "canvas_view", None), "scene", lambda: None)()
+        )
+        analisis = self._analizar_componente_multinudo(red_o_union)
+        if not analisis.get("valida"):
+            self.texto_resultados.setPlainText(
+                f"Red multi-nudo incompleta: {analisis.get('mensaje', 'verifica las conexiones.')}"
+            )
+            return
+
+        rho, mu = self.fluido_rho, self.fluido_mu
+        gamma = rho * MotorFluidos.g
+
+        nodos_ram = analisis["nodos_ramificados"]
+        tanques = analisis["tanques"]
+        tramos_macro = analisis["tramos_macro"]
+
+        try:
+            terminales = {
+                tq: tq.elevacion_z + ((0.0 if tq.abierto_atmosfera else tq.presion_P) / gamma)
+                for tq in tanques
+            }
+            tramos_si = []
+            for macro in tramos_macro:
+                segs = []
+                for tub in macro["tuberias"]:
+                    L_si, D_si, eps_si = self._datos_si(tub)
+                    if L_si <= 0 or D_si <= 0:
+                        raise ValueError(f"{tub.nombre}: L y D deben ser mayores que cero.")
+                    segs.append(
+                        {
+                            "tuberia": tub,
+                            "L": L_si,
+                            "D": D_si,
+                            "eps": eps_si,
+                            "K": float(getattr(tub, "sumatoria_K", 0.0)),
+                            "LeD": float(getattr(tub, "sumatoria_Le_D", 0.0)),
+                        }
+                    )
+                tramo_dict = {
+                    "origen": macro["origen"],
+                    "destino": macro["destino"],
+                    "meta": macro,
+                }
+                if len(segs) == 1:
+                    tramo_dict.update(segs[0])
+                else:
+                    tramo_dict["segmentos"] = segs
+                tramos_si.append(tramo_dict)
+        except (ValueError, ZeroDivisionError) as err:
+            self.texto_resultados.setPlainText(f"Faltan datos. Verifica L y D.\n\nDetalle: {err}")
+            return
+
+        H_iniciales = {
+            u: u.energia_supuesta
+            for u in nodos_ram
+            if getattr(u, "energia_supuesta", 0.0) > 0.0
+        } or None
+
+        try:
+            resultado = MotorFluidos.resolver_red_ramificada_multinudo(
+                nodos_ram, terminales, tramos_si, rho, mu, H_iniciales=H_iniciales
+            )
+            resultado.verificar()
+            H_nodos, resultados_tramos = resultado
+        except (ValueError, ZeroDivisionError) as err:
+            self.texto_resultados.setPlainText(f"Error de cálculo.\n\nDetalle: {err}")
+            return
+
+        # 1. Actualizar cotas piezométricas en todos los nudos de ramificación
+        for u in nodos_ram:
+            u.hj_calculada = float(H_nodos[u])
+            u.actualizar_etiqueta()
+
+        # 2. Guardar caudales, pérdidas, flechas y cabezas en nudos intermedios en serie
+        items_export = []
+        filas_cad = []
+        filas_flujo = []
+        entradas = {u: [] for u in nodos_ram}
+        salidas = {u: [] for u in nodos_ram}
+        hf_tot = hf_dist_tot = hf_acc_tot = hf_bordes_tot = 0.0
+        adj_flujo = {}
+
+        for res_m in resultados_tramos:
+            macro = res_m["meta"]
+            q_si = res_m["Q"]
+            flujo_ori = res_m["flujo_origen"]
+            flujo_des = res_m["flujo_destino"]
+            mismo_sentido = flujo_ori is macro["origen"]
+
+            tubs_ori_a_des = macro["tuberias"]
+            perd_segs = res_m["perdidas_segmentos"]
+            if mismo_sentido:
+                tubs_flujo = list(tubs_ori_a_des)
+                perd_flujo = list(perd_segs)
+                nodos_ser_flujo = list(macro["nodos_serie"])
+            else:
+                tubs_flujo = list(reversed(tubs_ori_a_des))
+                perd_flujo = list(reversed(perd_segs))
+                nodos_ser_flujo = list(reversed(macro["nodos_serie"]))
+
+            adj_flujo.setdefault(flujo_ori, []).append((flujo_des, tubs_flujo, q_si))
+
+            # Cota piezométrica de nudos intermedios (grado 2) en sentido real de flujo
+            h_curr = max(res_m["H_origen"], res_m["H_destino"])
+            for idx_sub, (tub, (hf_s, dist_s, loc_s)) in enumerate(zip(tubs_flujo, perd_flujo)):
+                q_ui = self._desde_si(q_si, tub.u_Q)
+                tub.caudal_Q = q_ui
+                tub.actualizar_texto_hf(hf_s)
+                tub.hf_dist_calculado = dist_s
+                tub.hf_loc_calculado = loc_s
+                tub._q_por_energia = True
+                if self.tuberia_seleccionada is tub and "Q" in self.campos_tuberia:
+                    self.campos_tuberia["Q"].setText(str(q_ui))
+
+                try:
+                    h_acc_s, h_brd_s = desglosar_perdidas_tuberia(tub, loc_s)
+                except Exception:
+                    h_acc_s, h_brd_s = loc_s, 0.0
+                hf_tot += hf_s
+                hf_dist_tot += dist_s
+                hf_acc_tot += h_acc_s
+                hf_bordes_tot += h_brd_s
+
+                items_export.append((tub, q_si, hf_s, None, None, "multinudo"))
+                fila_c, _ = self._fila_tabla_cad_tuberia(tub, q_si, hf_s)
+                filas_cad.append(fila_c)
+                filas_flujo.append(
+                    [tub.nombre, rpt_num(f"{q_ui:.4f} {tub.u_Q}"), res_m["direccion"]]
+                )
+
+                h_curr -= hf_s
+                if idx_sub < len(nodos_ser_flujo):
+                    ns = nodos_ser_flujo[idx_sub]
+                    ns.hj_calculada = float(h_curr)
+                    ns.actualizar_etiqueta()
+
+            aplicar_sentido_flujo_ruta(flujo_ori, tubs_flujo, signo=(1 if q_si > 0 else 0))
+
+            q_tag = (
+                f"Q{macro['tuberias'][0].id_tuberia}"
+                if len(macro["tuberias"]) == 1 and macro["tuberias"][0].id_tuberia is not None
+                else " + ".join(
+                    f"Q{t.id_tuberia}" if t.id_tuberia is not None else t.nombre
+                    for t in macro["tuberias"][:1]
+                )
+            )
+            if flujo_ori in salidas:
+                salidas[flujo_ori].append(q_tag)
+            if flujo_des in entradas:
+                entradas[flujo_des].append(q_tag)
+
+        # 3. Tablas de continuidad y energía piezométrica nodal
+        lineas_ecuacion = []
+        for u in nodos_ram:
+            txt_in = " + ".join(entradas[u]) if entradas[u] else "0"
+            txt_out = " + ".join(salidas[u]) if salidas[u] else "0"
+            lineas_ecuacion.append(f"{u.nombre}: {txt_in} = {txt_out}")
+
+        filas_nudos = []
+        for u in nodos_ram:
+            filas_nudos.append([u.nombre, "Ramificación", rpt_num(f"{H_nodos[u]:.4f} m")])
+        for ns in analisis["uniones_serie"]:
+            h_ns = getattr(ns, "hj_calculada", None)
+            filas_nudos.append(
+                [ns.nombre, "Serie (paso)", rpt_num(f"{h_ns:.4f} m" if h_ns is not None else "—")]
+            )
+
+        h_min_n = min(H_nodos.values())
+        h_max_n = max(H_nodos.values())
+        res_m = float(resultado.residuo_masa)
+
+        kpis = rpt_grid_2x2(
+            [
+                (
+                    "NUDOS RAMIFICADOS",
+                    "⑂",
+                    str(len(nodos_ram)),
+                    "uniones",
+                    f"{len(tanques)} reservorios · {len(items_export)} tramos",
+                    "#0284c7",
+                ),
+                (
+                    "RANGO H EN NUDOS",
+                    "📍",
+                    f"{h_min_n:.2f}–{h_max_n:.2f}",
+                    "m",
+                    "Alturas piezométricas equilibradas",
+                    "#0284c7",
+                ),
+                (
+                    "VARIACIÓN MÁX ΔQ",
+                    "⚖",
+                    f"{res_m:.2e}",
+                    "m³/s",
+                    "Conservación en cada nudo",
+                    RPT_VERDE,
+                ),
+                (
+                    "ITERACIONES",
+                    "⚙",
+                    str(resultado.iteraciones),
+                    "",
+                    "Convergencia global en árbol",
+                    "#64748b",
+                ),
+            ]
+        )
+
+        estado = rpt_estado(
+            "ok",
+            f"Red multi-nudo en equilibrio ({len(nodos_ram)} nudos)",
+            "Se resolvió simultáneamente la conservación de masa y energía en todos los nudos de unión.",
+        )
+
+        html = (
+            kpis
+            + estado
+            + rpt_seccion_cad("ALTURAS PIEZOMÉTRICAS NODALES", "ENERGÍA")
+            + rpt_tabla(filas_nudos, ["NUDO", "ROL", "COTA PIEZOMÉTRICA H"], ["left", "left", "right"])
+            + rpt_seccion_cad("PÉRDIDAS POR TRAMO", "UNIDADES SI")
+            + rpt_tabla(
+                filas_cad,
+                ["RAMAL", "Q (M³/S)", "V (M/S)", "F (C-W)", "HF FRIC. (M)"],
+                ["left", "right", "right", "right", "right"],
+            )
+            + rpt_seccion_cad("SENTIDO DE FLUJO Y CONTINUIDAD", "BALANCE")
+            + rpt_tabla(filas_flujo, ["TUBERÍA", "CAUDAL Q", "SENTIDO"], ["left", "right", "left"])
+            + rpt_ecuaciones(lineas_ecuacion)
+        )
+
+        self.texto_resultados.setHtml(html)
+        self._actualizar_barra_perdidas(hf_tot, hf_dist_tot, hf_acc_tot, hf_bordes_tot)
+
+        # 4. Construir trayectorias fuente -> destino para el perfil EGL
+        rutas_mn = []
+        tq_max = max(tanques, key=lambda tq: terminales[tq])
+        tq_min = min(tanques, key=lambda tq: terminales[tq])
+        fuentes_tq = [tq for tq in tanques if adj_flujo.get(tq)]
+
+        def _dfs_egl(tq_ini, nodo_actual, ruta_acum, visitados_dfs):
+            for sig, segs, q_arc in adj_flujo.get(nodo_actual, []):
+                if q_arc <= 0.0 or id(sig) in visitados_dfs:
+                    continue
+                nueva_ruta = ruta_acum + list(segs)
+                if isinstance(sig, TanqueGrafico):
+                    tub_ref = nueva_ruta[-1]
+                    rutas_mn.append(
+                        dict(
+                            tuberias=nueva_ruta,
+                            tanque_ini=tq_ini,
+                            tanque_fin=sig,
+                            color=tub_ref.pen().color().name(),
+                            tub_referencia=tub_ref,
+                        )
+                    )
+                else:
+                    _dfs_egl(tq_ini, sig, nueva_ruta, visitados_dfs | {id(sig)})
+
+        for tq_s in fuentes_tq:
+            _dfs_egl(tq_s, tq_s, [], {id(tq_s)})
+
+        series_mn = self._construir_series_rutas_egl(rutas_mn) if rutas_mn else []
+        if hasattr(self, "lbl_egl_subtitle"):
+            self.lbl_egl_subtitle.setText(
+                f"Red multi-nudo · " + " – ".join(u.nombre for u in nodos_ram[:4])
+            )
+        if hasattr(self, "egl_chart"):
+            self.egl_chart.actualizar_datos(
+                series_mn,
+                resumen={
+                    "z1": tq_max.elevacion_z,
+                    "z2": tq_min.elevacion_z,
+                    "hf_total": hf_tot,
+                    "excedente": h_max_n,
+                    "sub_z1": f"{tq_max.nombre} (Mayor cota)",
+                    "sub_z2": f"{tq_min.nombre} (Menor cota)",
+                    "sub_hf": "Suma de tramos en red",
+                    "tit_exc": "H MÁXIMA EN NUDOS",
+                    "sub_exc": f"Rango {h_min_n:.2f}–{h_max_n:.2f} m · Equilibrio",
+                    "col_exc": "#006398",
+                },
+            )
+
+        self._registrar_exportacion(
+            "Sistema Ramificado (Multi-Nudo)",
+            items_export,
+            {},
+            lineas_ecuacion,
+            res_m,
+            self._recomendacion_continuidad(res_m),
+            calculos_globales={f"{u.nombre} H [m]": H_nodos[u] for u in nodos_ram},
+        )
+
+
+class RedMultiNudo:
+    """Descriptor de una componente ramificada en árbol con múltiples nudos de unión."""
+
+    def __init__(self, nodos):
+        self.nodos = tuple(nodos)
+
+    @property
+    def nombre(self):
+        sufijo = ", ...)" if len(self.nodos) > 3 else ")"
+        return "Red multi-nudo (" + ", ".join(n.nombre for n in self.nodos[:3]) + sufijo
+
+    def __eq__(self, other):
+        return isinstance(other, RedMultiNudo) and self.nodos == other.nodos
+
+    def __hash__(self):
+        return hash((RedMultiNudo, self.nodos))
+
+
+

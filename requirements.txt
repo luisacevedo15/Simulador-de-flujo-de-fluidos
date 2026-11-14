@@ -1,0 +1,12 @@
+# Aplicación y motor
+PyQt5
+numpy
+# Reproducción de las demostraciones locales de los trazadores
+av
+# Exportación y vista previa Excel
+XlsxWriter
+openpyxl
+# Empaquetado del ejecutable
+pyinstaller
+# Verificación sin ejecutar la interfaz
+pytest

@@ -1,0 +1,1722 @@
+"""Resolución de tuberías en serie y en paralelo y ruta de la red."""
+
+import math
+
+from collections import deque
+from dataclasses import replace
+
+from PyQt5.QtCore import QLineF
+from PyQt5.QtWidgets import QDialog, QInputDialog, QMessageBox
+
+from ui.graficos import AccesorioGrafico, BombaGrafica, NodoUnionGrafico, TanqueGrafico
+from ui.dialogos import DialogoSuposicionParalelo
+from motor import MotorFluidos
+from motor.hidraulica import (evaluar_tramo, resultado_tramo_desde_perdidas,
+                             desglosar_accesorios_calculados)
+from motor.perfiles import construir_perfil_ruta, construir_perfiles_red, perfil_como_serie
+from motor.numerica import ResultadoTupla
+from ui.ventana.invalidacion import (
+    aplicar_sentido_flujo_ruta,
+    asignar_sentido_flujo,
+    limpiar_desglose_tuberia,
+)
+from ui.reportes import RPT_AZUL, RPT_NARANJA, RPT_ROJO, RPT_TEXTO, RPT_VERDE, formatear_reynolds_html, rpt_estado, rpt_grid_2x2, rpt_num, rpt_seccion_cad, rpt_tabla
+
+
+class ResolucionMixin:
+    """Resolución de tuberías en serie y en paralelo y ruta de la red."""
+
+    def _encontrar_ruta(self, nodo_inicio, nodo_fin):
+        rutas = []
+        cola = deque([(nodo_inicio, [], {nodo_inicio})])
+        while cola:
+            nodo, ruta, visitados = cola.popleft()
+            for tuberia in nodo.tuberias:
+                if tuberia in ruta:
+                    continue
+                siguiente = tuberia.nodo_destino if tuberia.nodo_origen is nodo else tuberia.nodo_origen
+                if siguiente in visitados:
+                    continue
+                nueva = ruta + [tuberia]
+                if siguiente is nodo_fin:
+                    rutas.append(nueva)
+                elif isinstance(siguiente, (AccesorioGrafico, BombaGrafica)):
+                    cola.append((siguiente, nueva, visitados | {siguiente}))
+                elif isinstance(siguiente, NodoUnionGrafico):
+                    tanques_ajenos = [
+                        (t.nodo_destino if t.nodo_origen is siguiente else t.nodo_origen)
+                        for t in siguiente.tuberias
+                        if isinstance(
+                            (t.nodo_destino if t.nodo_origen is siguiente else t.nodo_origen),
+                            TanqueGrafico,
+                        )
+                        and (t.nodo_destino if t.nodo_origen is siguiente else t.nodo_origen)
+                        not in (nodo_inicio, nodo_fin)
+                    ]
+                    if not tanques_ajenos:
+                        cola.append((siguiente, nueva, visitados | {siguiente}))
+        rutas.sort(key=lambda r: (len(r), [t.id_tuberia or 0 for t in r]))
+        return rutas
+
+    def _datos_si(self, tuberia):
+        L_si = self._a_si(tuberia.longitud, tuberia.u_L)
+        D_si = self._a_si(tuberia.diametro, tuberia.u_D)
+        eps_si = self._a_si(tuberia.rugosidad, tuberia.u_eps)
+        if D_si <= 0 or L_si <= 0:
+            raise ValueError(f"{tuberia.nombre}: L y D deben ser mayores que cero.")
+        return L_si, D_si, eps_si
+
+    def _hf_tuberia(self, tuberia, Q_si, registrar=False):
+        L_si, D_si, eps_si = self._datos_si(tuberia)
+        r = evaluar_tramo(Q_si,L_si,D_si,eps_si,tuberia.sumatoria_K,tuberia.sumatoria_Le_D,
+            dict(rho=self.fluido_rho,mu=self.fluido_mu,g=MotorFluidos.g),id=str(tuberia.id_tuberia))
+        tuberia._resultado_tramo_resuelto = r
+        return ResultadoTupla((r.hf_total,r.hf_distribuida,r.hf_localizada))
+
+    def _guardar_resultado_tuberia(self, tuberia, Q_si, hf, por_energia=False, hf_dist=None, hf_loc=None,
+                                  resultado_tramo=None):
+        candidato = resultado_tramo or getattr(tuberia,'_resultado_tramo_resuelto',None)
+        limpiar_desglose_tuberia(tuberia)
+        tuberia.caudal_Q = self._desde_si(Q_si, tuberia.u_Q)
+        tuberia.actualizar_texto_hf(hf)
+        if hf_dist is not None:
+            tuberia.hf_dist_calculado = float(hf_dist)
+        if hf_loc is not None:
+            tuberia.hf_loc_calculado = float(hf_loc)
+        if candidato is not None and candidato.Q==Q_si and math.isclose(candidato.hf_total,hf,rel_tol=1e-8,abs_tol=1e-12):
+            tuberia._resultado_tramo_resuelto = candidato
+        elif hf_dist is not None and hf_loc is not None and hasattr(tuberia,'sumatoria_K'):
+            L,D,eps = self._datos_si(tuberia)
+            tuberia._resultado_tramo_resuelto = resultado_tramo_desde_perdidas(Q_si,L,D,eps,
+                tuberia.sumatoria_K,tuberia.sumatoria_Le_D,
+                dict(rho=self.fluido_rho,mu=self.fluido_mu,g=MotorFluidos.g),hf,hf_dist,hf_loc,
+                id=str(getattr(tuberia,'id_tuberia','tramo')))
+        if self.tuberia_seleccionada is tuberia and "Q" in self.campos_tuberia:
+            self.campos_tuberia["Q"].setText(str(tuberia.caudal_Q))
+        tuberia._q_por_energia = por_energia
+        self._refrescar_label_hf(tuberia)
+
+    def _resultado_para_perfil(self, tuberia, nodo_inicio=None):
+        r = getattr(tuberia, '_resultado_tramo_resuelto', None)
+        if r is None:
+            L,D,eps = self._datos_si(tuberia)
+            hd,hl = getattr(tuberia,'hf_dist_calculado',None),getattr(tuberia,'hf_loc_calculado',None)
+            if hd is None or hl is None or tuberia.hf_calculado is None:
+                raise ValueError(f'{tuberia.nombre}: falta un desglose calculado para el perfil.')
+            r = resultado_tramo_desde_perdidas(self._a_si(tuberia.caudal_Q,tuberia.u_Q),
+                L,D,eps,tuberia.sumatoria_K,tuberia.sumatoria_Le_D,
+                dict(rho=self.fluido_rho,mu=self.fluido_mu,g=MotorFluidos.g),
+                tuberia.hf_calculado,hd,hl,id=str(tuberia.id_tuberia))
+            tuberia._resultado_tramo_resuelto = r
+        origen = nodo_inicio if nodo_inicio is not None else tuberia.nodo_origen
+        destino = tuberia.nodo_destino if tuberia.nodo_origen is origen else tuberia.nodo_origen
+        r = replace(r,id=str(tuberia.id_tuberia),origen=getattr(origen,'nombre',None),
+                    destino=getattr(destino,'nombre',None))
+        datos = []
+        for acc in tuberia._accesorios_asignados():
+            if acc is origen:
+                fraccion = 0.0
+            elif acc is destino:
+                fraccion = 1.0
+            else:
+                p0,p1 = tuberia._centro(origen),tuberia._centro(destino)
+                largo = QLineF(p0,p1).length()
+                fraccion = QLineF(p0,acc.sceneBoundingRect().center()).length()/largo if largo else 0.5
+            datos.append((getattr(acc,'forma_visual','Accesorio'),r.L*max(0,min(1,fraccion)),
+                          acc.valor if acc.tipo_perdida=='K' else 0.0,
+                          acc.valor if acc.tipo_perdida=='Le/D' else 0.0))
+        perdidas_tanques = getattr(tuberia, '_datos_perdidas_tanques', None)
+        if callable(perdidas_tanques):
+            datos.extend(perdidas_tanques(origen, destino, r.L))
+        return desglosar_accesorios_calculados(r,datos,g=MotorFluidos.g)
+
+    def _construir_puntos_tramo_egl(self, tuberia, x_ini, egl_ini, Q_si, hf_total,
+            etiqueta_fin='', sub_etiqueta_fin='', incluir_entrada=False, incluir_salida=False,
+            h_W=0.0, hf_dist=None, hf_loc=None, nodo_inicio=None):
+        r = self._resultado_para_perfil(tuberia,nodo_inicio)
+        perfil = construir_perfil_ruta((r,),egl_ini,g=MotorFluidos.g,s_inicio=x_ini,
+            etiquetas=('',etiqueta_fin),entrada=incluir_entrada,salida=incluir_salida)
+        serie = perfil_como_serie(perfil)
+        ultimo = next(p for p in reversed(perfil.puntos) if p.tipo!='salida')
+        return serie['puntos'],perfil.puntos[-1].s,perfil.H_final_calculada,ultimo.EGL-ultimo.HGL
+
+    def _datos_perfil_ruta(self, tuberias, tanque_ini, tanque_fin, nombre_serie='',
+            color='#0284c7', h_W=0.0, es_paralelo=False, es_mixto=False, **_extra):
+        gamma = self.fluido_rho*MotorFluidos.g
+        def altura(nodo):
+            if isinstance(nodo,NodoUnionGrafico) and nodo.hj_calculada is not None:
+                return nodo.hj_calculada
+            return nodo.elevacion_z+(0.0 if nodo.abierto_atmosfera else nodo.presion_P)/gamma
+        H_ini,H_fin = altura(tanque_ini),altura(tanque_fin)
+        nodo, tramos, bombas = tanque_ini, [], []
+        cotas,etiquetas = [getattr(tanque_ini,'elevacion_z',None)],[tanque_ini.nombre]
+        for i,t in enumerate(tuberias):
+            tramos.append(self._resultado_para_perfil(t,nodo))
+            nodo = t.nodo_destino if t.nodo_origen is nodo else t.nodo_origen
+            cotas.append(getattr(nodo,'elevacion_z',None))
+            etiquetas.append(getattr(nodo,'nombre',getattr(nodo,'forma_visual','')))
+            if isinstance(nodo,BombaGrafica) or hasattr(nodo,'id_bomba'):
+                resultado = getattr(nodo,'resultado_estacion',None)
+                if resultado is None:
+                    raise ValueError('Falta ResultadoEstacion calculado para el salto de bomba.')
+                bombas.append((i,resultado))
+        nombre = nombre_serie or f'{tanque_ini.nombre} → {tanque_fin.nombre}'
+        return dict(tramos=tramos,H_inicio=H_ini,H_final=H_fin,bombas=bombas,
+                    cotas=cotas,etiquetas=etiquetas,id=nombre)
+
+    def _construir_series_rutas_egl(self, rutas):
+        """Prepara datos de CAD; el motor construye todas las rutas en una llamada."""
+        from ui.perfil_egl import WidgetPerfilEGLHGL
+
+        datos = [self._datos_perfil_ruta(**r) for r in rutas]
+        perfiles = construir_perfiles_red(datos,g=MotorFluidos.g)
+        cache = getattr(self,'_perfiles_calculados',None)
+        if cache is None:
+            cache = self._perfiles_calculados = {}
+        for perfil in perfiles:
+            cache[perfil.id] = perfil
+        if getattr(self,'datos_exportacion',None):
+            self.datos_exportacion['perfiles'] = list(cache.values())
+
+        colores = (
+            WidgetPerfilEGLHGL.resolver_colores_series(
+                [{"color": r.get("color", "#0284c7")} for r in rutas]
+            )
+            if len(rutas) > 1
+            else [rutas[0].get("color", "#0284c7")] if rutas else []
+        )
+        nombres_usados = set()
+        series = []
+        for idx, (p, r, col) in enumerate(zip(perfiles, rutas, colores)):
+            nom = str(r.get("nombre_serie") or p.id or f"Ruta {idx + 1}")
+            if nom in nombres_usados:
+                nom = f"{nom} ({idx + 1})"
+            nombres_usados.add(nom)
+            s = perfil_como_serie(p, nombre=nom, color=col)
+            tubs = r.get("tuberias") or ()
+            s["nombres_tramos"] = {
+                str(getattr(t, "id_tuberia", "")): str(getattr(t, "nombre", "")).strip()
+                for t in tubs
+                if getattr(t, "id_tuberia", None) is not None and getattr(t, "nombre", None)
+            }
+            s["tramo_ids"] = [str(getattr(t, "id_tuberia", "")) for t in tubs]
+            t_ref = r.get("tub_referencia") or (tubs[-1] if tubs else None)
+            res_t = getattr(t_ref, "_resultado_tramo_resuelto", None) if t_ref is not None else None
+            l_tot = float(p.puntos[-1].s - p.puntos[0].s) if len(p.puntos) >= 2 else 0.0
+            s["meta_ruta"] = {
+                "l_total": l_tot,
+                "hf_ruta": float(p.hf_distribuida + p.hf_localizada),
+                "q_ls": abs(float(res_t.Q)) * 1000.0 if res_t is not None else None,
+            }
+            series.append(s)
+        return series
+
+    def _construir_serie_ruta_egl(self, tuberias, tanque_ini, tanque_fin, nombre_serie='',
+            color='#0284c7', h_W=0.0, es_paralelo=False, es_mixto=False, **extra):
+        return self._construir_series_rutas_egl([dict(tuberias=tuberias,tanque_ini=tanque_ini,
+            tanque_fin=tanque_fin,nombre_serie=nombre_serie,color=color,**extra)])[0]
+
+    def _resolver_serie(self, tuberias, tanque1, tanque2):
+        MotorFluidos.limpiar_iteraciones()
+        if any(t.caudal_Q < 0 for t in tuberias):
+            QMessageBox.warning(self, "Datos inválidos", "El caudal Q no puede ser negativo.")
+            return None
+        fuente = next(
+            (t for t in tuberias if t.caudal_Q > 0 and not getattr(t, "_q_por_energia", False)),
+            None,
+        )
+        if fuente is None:
+            rho, mu = self.fluido_rho, self.fluido_mu
+            gamma = rho * MotorFluidos.g
+            P1 = 0.0 if tanque1.abierto_atmosfera else tanque1.presion_P
+            P2 = 0.0 if tanque2.abierto_atmosfera else tanque2.presion_P
+            H_1 = tanque1.elevacion_z + P1 / gamma
+            H_2 = tanque2.elevacion_z + P2 / gamma
+
+            if H_1 <= H_2:
+                QMessageBox.warning(
+                    self,
+                    "Flujo imposible",
+                    "Para resolver el sistema en serie sin caudal conocido, la energía del "
+                    f"tanque de inicio ({H_1:.4f} m) debe ser mayor que la del tanque de "
+                    f"destino ({H_2:.4f} m).",
+                )
+                return None
+
+            tramos = []
+            nodos_union_intermedios = []
+            nodo_actual = tanque1
+            for tub in tuberias:
+                L_si, D_si, eps_si = self._datos_si(tub)
+                nodo_salida = (
+                    tub.nodo_destino if tub.nodo_origen is nodo_actual else tub.nodo_origen
+                )
+                tramos.append({
+                    "tuberia": tub,
+                    "L": L_si,
+                    "D": D_si,
+                    "eps": eps_si,
+                    "K": tub.sumatoria_K,
+                    "LeD": tub.sumatoria_Le_D,
+                    "nodo_salida": nodo_salida,
+                })
+                if isinstance(nodo_salida, NodoUnionGrafico):
+                    nodos_union_intermedios.append(nodo_salida)
+                nodo_actual = nodo_salida
+
+            primer_nodo_j = nodos_union_intermedios[0] if nodos_union_intermedios else None
+            H_j_manual = (
+                primer_nodo_j.energia_supuesta
+                if (primer_nodo_j is not None and primer_nodo_j.energia_supuesta > 0)
+                else None
+            )
+
+            resultado_serie = MotorFluidos.resolver_serie_por_energia(
+                H_1, H_2, tramos, rho, mu, H_j_manual=H_j_manual
+            )
+            resultado_serie.verificar()
+            Q_si, alturas_nodos, perdidas_tramos, H_fin_calc, error_H = resultado_serie
+
+            hf_total = sum(p[0] for p in perdidas_tramos)
+            hf_dist = sum(p[1] for p in perdidas_tramos)
+            hf_loc = sum(p[2] for p in perdidas_tramos)
+
+            for tuberia, (hf_i, hf_dist_i, hf_loc_i) in zip(tuberias, perdidas_tramos):
+                self._guardar_resultado_tuberia(
+                    tuberia, Q_si, hf_i, por_energia=True, hf_dist=hf_dist_i, hf_loc=hf_loc_i
+                )
+            aplicar_sentido_flujo_ruta(tanque1, tuberias, signo=(1 if Q_si > 0 else 0))
+
+            for nodo, h_val in alturas_nodos:
+                if isinstance(nodo, NodoUnionGrafico):
+                    nodo.hj_calculada = float(h_val)
+                    nodo.actualizar_etiqueta()
+
+            salto_total = abs(H_1 - H_2)
+            es_adecuada = abs(error_H) <= 0.05 or (
+                salto_total > 0 and abs(error_H) / salto_total <= 0.01
+            )
+
+            letras_nodos = ("J", "K", "L", "M", "N")
+            filas_alturas = [
+                [
+                    f"{tanque1.nombre} (H<sub>A</sub>)",
+                    rpt_num(f"{H_1:.4f} m", RPT_TEXTO),
+                    "Dato (Inicio)",
+                ]
+            ]
+            calculos_globales = {}
+            for idx_n, (nodo, h_val) in enumerate(alturas_nodos):
+                letra = letras_nodos[idx_n] if idx_n < len(letras_nodos) else f"N{idx_n + 1}"
+                nombre_nodo = getattr(nodo, "nombre", f"Nudo {letra}")
+                es_supuesto = idx_n == 0 and H_j_manual is not None
+                cond_txt = "Supuesta (Tanteo)" if es_supuesto else "Calculada"
+                filas_alturas.append([
+                    f"{nombre_nodo} (H<sub>{letra}</sub>)",
+                    rpt_num(f"{h_val:.4f} m", RPT_AZUL),
+                    cond_txt,
+                ])
+                if not es_supuesto:
+                    calculos_globales[f"H_{letra} ({nombre_nodo})"] = h_val
+
+            calculos_globales["H_B* (Llegada calculada)"] = H_fin_calc
+            filas_alturas.append([
+                f"{tanque2.nombre} calc. (H<sub>B</sub>*)",
+                rpt_num(
+                    f"{H_fin_calc:.4f} m",
+                    RPT_VERDE if es_adecuada else RPT_ROJO,
+                ),
+                "H<sub>A</sub> - Σhf",
+            ])
+            filas_alturas.append([
+                f"{tanque2.nombre} real (H<sub>B</sub>)",
+                rpt_num(f"{H_2:.4f} m", RPT_TEXTO),
+                "Dato (Destino)",
+            ])
+            filas_alturas.append([
+                "<b>Error (H<sub>B</sub>* - H<sub>B</sub>)</b>",
+                rpt_num(
+                    f"{error_H:+.4f} m",
+                    RPT_VERDE if es_adecuada else RPT_ROJO,
+                ),
+                "Equilibrio" if es_adecuada else "Desbalance",
+            ])
+
+            filas_tub = [
+                [
+                    t.nombre,
+                    rpt_num(f"{t.caudal_Q:.6g} {t.u_Q}", RPT_TEXTO),
+                    rpt_num(f"{hf_i:.4f} m", RPT_TEXTO),
+                ]
+                for t, (hf_i, _, _) in zip(tuberias, perdidas_tramos)
+            ]
+            filas_tub.append(["<b>Σ Total</b>", "", rpt_num(f"{hf_total:.4f} m")])
+
+            u_q_ref = tuberias[0].u_Q
+            q_ref = tuberias[0].caudal_Q
+
+            if H_j_manual is not None:
+                subtitulo_hdr = f"Modo Tanteo Manual (H_J = {H_j_manual:.4f} m)"
+                color_hdr = RPT_VERDE if es_adecuada else RPT_NARANJA
+                if es_adecuada:
+                    diag_html = rpt_estado(
+                        "ok",
+                        "¿Es adecuada la altura piezométrica supuesta en J? — SÍ ES ADECUADA",
+                        f"La altura calculada al llegar a {tanque2.nombre} "
+                        f"(<b>H<sub>B</sub>* = {H_fin_calc:.4f} m</b>) coincide prácticamente "
+                        f"con la altura real (<b>H<sub>B</sub> = {H_2:.4f} m</b>), con un "
+                        f"error de apenas <b>{error_H:+.4f} m</b>.",
+                    )
+                    rec_export = (
+                        f"EQUILIBRIO: la altura supuesta H_J = {H_j_manual:.4f} m SÍ es adecuada "
+                        f"(H_B* = {H_fin_calc:.4f} m ≈ H_B = {H_2:.4f} m, error = {error_H:+.4f} m)."
+                    )
+                else:
+                    if error_H > 0:
+                        explicacion = (
+                            f"Al llegar a {tanque2.nombre} <b>sobra energía</b>: "
+                            f"<b>H<sub>B</sub>* = {H_fin_calc:.4f} m &gt; H<sub>B</sub> = {H_2:.4f} m</b> "
+                            f"(diferencia de <b>{error_H:+.4f} m</b>).<br>"
+                            "Las pérdidas acumuladas son menores al desnivel real. "
+                            "Debes <b>DISMINUIR H<sub>J</sub></b> para incrementar hf<sub>1</sub> y el caudal Q."
+                        )
+                        accion_exp = "DISMINUYE"
+                    else:
+                        explicacion = (
+                            f"Al llegar a {tanque2.nombre} <b>falta energía</b>: "
+                            f"<b>H<sub>B</sub>* = {H_fin_calc:.4f} m &lt; H<sub>B</sub> = {H_2:.4f} m</b> "
+                            f"(diferencia de <b>{error_H:+.4f} m</b>).<br>"
+                            "Las pérdidas acumuladas superan el desnivel disponible. "
+                            "Debes <b>AUMENTAR H<sub>J</sub></b> para reducir hf<sub>1</sub> y el caudal Q."
+                        )
+                        accion_exp = "AUMENTA"
+                    diag_html = rpt_estado(
+                        "error",
+                        "¿Es adecuada la altura piezométrica supuesta en J? — NO ES ADECUADA",
+                        explicacion,
+                    )
+                    rec_export = (
+                        f"ERRÓNEO: H_J = {H_j_manual:.4f} m NO es adecuada "
+                        f"(H_B* = {H_fin_calc:.4f} m != H_B = {H_2:.4f} m). {accion_exp} H_J."
+                    )
+                sup_export = {"H_J (Supuesta)": H_j_manual, "H_A": H_1, "H_B": H_2}
+            else:
+                subtitulo_hdr = f"{len(tuberias)} tuberías en serie · Modo Automático"
+                color_hdr = RPT_VERDE
+                diag_html = rpt_estado(
+                    "ok",
+                    "Sistema en serie resuelto automáticamente",
+                    f"Caudal de equilibrio Q = <b>{q_ref:.6g} {u_q_ref}</b> "
+                    f"(H<sub>B</sub>* = H<sub>B</sub> = {H_2:.4f} m).",
+                )
+                rec_export = (
+                    "EQUILIBRIO: alturas piezométricas y caudal calculados por bisección "
+                    f"(pérdida total hf = {hf_total:.4f} m)."
+                )
+                hj_auto = alturas_nodos[0][1] if alturas_nodos else (H_1 - perdidas_tramos[0][0])
+                sup_export = {"H_J (Calculada)": hj_auto, "H_A": H_1, "H_B": H_2}
+
+            sup_export.update({
+                "Metodo": "Darcy verificado", "Iteraciones": resultado_serie.iteraciones,
+                "Residuo_masa_relativo": resultado_serie.residuo_masa_relativo,
+                "Residuo_energia_relativo": resultado_serie.residuo_energia_relativo,
+            })
+
+            items_serie_exp = [
+                (
+                    t,
+                    Q_si,
+                    hf_i,
+                    None,
+                    None,
+                    "serie_karman" if idx == 0 else "serie_colebrook",
+                )
+                for idx, (t, (hf_i, _, _)) in enumerate(zip(tuberias, perdidas_tramos))
+            ]
+            self._registrar_exportacion(
+                "Sistema en Serie (por Energía)",
+                items_serie_exp,
+                sup_export,
+                [" = ".join(f"Q{t.id_tuberia}" if t.id_tuberia is not None else "Q" for t in tuberias)],
+                error_H,
+                rec_export,
+                ordenar=False,
+                ok=es_adecuada,
+                calculos_globales=calculos_globales,
+            )
+
+            filas_cad = []
+            re_max = 0.0
+            for t, (hf_i, _, _) in zip(tuberias, perdidas_tramos):
+                fila_c, re_t = self._fila_tabla_cad_tuberia(t, Q_si, hf_i)
+                filas_cad.append(fila_c)
+                re_max = max(re_max, re_t)
+
+            hj_kpi = alturas_nodos[0][1] if alturas_nodos else (H_1 - perdidas_tramos[0][0])
+            sub_hj = "Supuesta (Tanteo)" if H_j_manual is not None else "Calculada (Auto)"
+            if len(alturas_nodos) >= 2:
+                card_3 = (
+                    "ALTURA EN K (Hk)",
+                    "📍",
+                    f"{alturas_nodos[1][1]:.2f}",
+                    "m",
+                    "Calculada (2da unión)",
+                    "#0284c7",
+                )
+            else:
+                card_3 = (
+                    "PÉRDIDA ΣHF",
+                    "↘",
+                    f"{hf_total:.2f}",
+                    "m",
+                    f"ΔP = {hf_total * rho * 9.81 / 1000.0:.1f} kPa",
+                    "#64748b",
+                )
+
+            protagonista = rpt_grid_2x2(
+                [
+                    ("CAUDAL SERIE Q", "≈", f"{Q_si:.4f}", "m³/s", f"{Q_si * 1000.0:.2f} L/s", "#0284c7"),
+                    ("ALTURA EN J (Hj)", "📍", f"{hj_kpi:.2f}", "m", sub_hj, "#64748b"),
+                    card_3,
+                    (
+                        "LLEGADA H_B*",
+                        "🎯",
+                        f"{H_fin_calc:.2f}",
+                        "m",
+                        f"Error ΔH = {error_H:+.2f} m vs H_B",
+                        RPT_VERDE if es_adecuada else RPT_ROJO,
+                    ),
+                ]
+            )
+            detalle = (
+                diag_html
+                + rpt_seccion_cad("PÉRDIDAS POR TRAMO", "UNIDADES SI")
+                + rpt_tabla(
+                    filas_cad,
+                    ["RAMAL", "Q (M³/S)", "V (M/S)", "F (C-W)", "HF FRIC. (M)"],
+                    ["left", "right", "right", "right", "right"],
+                )
+                + rpt_seccion_cad("ALTURAS PIEZOMÉTRICAS", "VERIFICACIÓN")
+                + rpt_tabla(
+                    filas_alturas,
+                    ["PUNTO / NUDO", "ALTURA H", "CONDICIÓN"],
+                    ["left", "right", "left"],
+                )
+            )
+            return protagonista, detalle, hf_total, hf_dist, hf_loc
+
+        Q_si = self._a_si(fuente.caudal_Q, fuente.u_Q)
+        conflicto = any(
+            t.caudal_Q > 0 and abs(self._a_si(t.caudal_Q, t.u_Q) - Q_si) > 1e-8 * Q_si
+            for t in tuberias
+        )
+
+        calculos = [(t, *self._hf_tuberia(t, Q_si, registrar=True)) for t in tuberias]
+        hf_total = sum(c[1] for c in calculos)
+        hf_dist = sum(c[2] for c in calculos)
+        hf_loc = sum(c[3] for c in calculos)
+        for tuberia, hf, hf_d, hf_l in calculos:
+            self._guardar_resultado_tuberia(tuberia, Q_si, hf, hf_dist=hf_d, hf_loc=hf_l)
+        aplicar_sentido_flujo_ruta(tanque1, tuberias, signo=(1 if Q_si > 0 else 0))
+
+        self._registrar_exportacion(
+            "Sistema en Serie",
+            [(t, Q_si, hf, None, None, "colebrook") for t, hf, _, _ in calculos],
+            {},
+            [" = ".join(f"Q{t.id_tuberia}" if t.id_tuberia is not None else "Q" for t in tuberias)],
+            0.0,
+            "EQUILIBRIO: el mismo caudal circula por todas las tuberías de la serie "
+            f"(pérdida total hf = {hf_total:.4f} m).",
+            ordenar=False,
+        )
+
+        rho = self.fluido_rho
+        g = 9.81
+        P1 = 0.0 if tanque1.abierto_atmosfera else tanque1.presion_P
+        P2 = 0.0 if tanque2.abierto_atmosfera else tanque2.presion_P
+        h_W_serie = ((P2 - P1) / (rho * g)) + (tanque2.elevacion_z - tanque1.elevacion_z) + hf_total
+        dh_disp = (tanque1.elevacion_z - tanque2.elevacion_z) + ((P1 - P2) / (rho * g))
+
+        filas_cad = []
+        re_max = 0.0
+        for t, hf, _, _ in calculos:
+            fila_c, re_t = self._fila_tabla_cad_tuberia(t, Q_si, hf)
+            filas_cad.append(fila_c)
+            re_max = max(re_max, re_t)
+
+        reg_txt = "Turbulento" if re_max >= 4000 else ("Laminar" if re_max < 2000 else "Transición")
+        reg_col = RPT_ROJO if re_max >= 4000 else RPT_AZUL
+
+        aviso = (
+            rpt_estado(
+                "aviso",
+                "Había caudales distintos",
+                f"Se impuso el caudal de {fuente.nombre} a todas las tuberías de la serie.",
+            )
+            if conflicto
+            else ""
+        )
+        if h_W_serie > 0.1:
+            estado_serie = rpt_estado(
+                "aviso",
+                "Requiere impulsión por bomba",
+                f"Las pérdidas en serie (<b>hf = {hf_total:.2f} m</b>) superan el gradiente "
+                f"disponible (<b>Δh = {dh_disp:.2f} m</b>). Se requiere <b>h_W = {h_W_serie:.2f} m</b>.",
+            )
+        else:
+            estado_serie = rpt_estado(
+                "ok",
+                "Flujo por gravedad (Sistema en Serie)",
+                f"Gradiente piezométrico superior a las pérdidas (<b>Δh = {dh_disp:.2f} m ≥ "
+                f"hf = {hf_total:.2f} m</b>). Conducción natural continua.",
+            )
+
+        protagonista = rpt_grid_2x2(
+            [
+                ("CAUDAL Q", "≈", f"{Q_si:.4f}", "m³/s", f"{Q_si * 1000.0:.2f} L/s", "#0284c7"),
+                (
+                    "PÉRDIDA HF",
+                    "↘",
+                    f"{hf_total:.2f}",
+                    "m",
+                    f"ΔP = {hf_total * rho * g / 1000.0:.1f} kPa",
+                    "#64748b",
+                ),
+                (
+                    "ALTURA H_W",
+                    "⚡",
+                    f"{max(0.0, h_W_serie):.2f}",
+                    "m",
+                    "Bomba requerida" if h_W_serie > 0.1 else "No requerida",
+                    RPT_NARANJA if h_W_serie > 0.1 else "#64748b",
+                ),
+                ("REYNOLDS RE", "⚙", formatear_reynolds_html(re_max), "", reg_txt, reg_col),
+            ]
+        )
+        detalle = (
+            f"{aviso}{estado_serie}"
+            + rpt_seccion_cad("PÉRDIDAS POR TRAMO", "UNIDADES SI")
+            + rpt_tabla(
+                filas_cad,
+                ["RAMAL", "Q (M³/S)", "V (M/S)", "F (C-W)", "HF FRIC. (M)"],
+                ["left", "right", "right", "right", "right"],
+            )
+        )
+        return protagonista, detalle, hf_total, hf_dist, hf_loc
+
+    def _resolver_paralelo(self, ramas, tanque1=None, tanque2=None):
+        MotorFluidos.limpiar_iteraciones()
+        if any(t.caudal_Q < 0 for t in ramas):
+            QMessageBox.warning(self, "Datos inválidos", "El caudal Q no puede ser negativo.")
+            return None
+        if any(t.diametro < 0 for t in ramas):
+            QMessageBox.warning(self, "Datos inválidos", "El diámetro D no puede ser negativo.")
+            return None
+
+        rho, mu = self.fluido_rho, self.fluido_mu
+        ramas_sin_d = [t for t in ramas if t.diametro == 0]
+
+        # Caso 1: Ampliación en paralelo con 1 tubería de diámetro desconocido (D == 0)
+        if len(ramas_sin_d) > 1:
+            QMessageBox.warning(
+                self,
+                "Datos insuficientes",
+                "En un sistema en paralelo solo puede haber una tubería con diámetro desconocido (D = 0).",
+            )
+            return None
+
+        if len(ramas_sin_d) == 1:
+            if tanque1 is None or tanque2 is None:
+                QMessageBox.warning(
+                    self,
+                    "Datos insuficientes",
+                    "Se requieren los dos tanques extremos para calcular la ampliación en paralelo.",
+                )
+                return None
+
+            tub_nueva = ramas_sin_d[0]
+            ramas_antiguas = [t for t in ramas if t is not tub_nueva]
+
+            for t in ramas:
+                if self._a_si(t.longitud, t.u_L) <= 0:
+                    raise ValueError(f"{t.nombre}: L debe ser mayor que cero.")
+
+            gamma = rho * MotorFluidos.g
+            P1 = 0.0 if tanque1.abierto_atmosfera else tanque1.presion_P
+            P2 = 0.0 if tanque2.abierto_atmosfera else tanque2.presion_P
+            H_1 = tanque1.elevacion_z + P1 / gamma
+            H_2 = tanque2.elevacion_z + P2 / gamma
+            hf = H_1 - H_2
+
+            if hf <= 0:
+                QMessageBox.warning(
+                    self,
+                    "Flujo imposible",
+                    "La pérdida de carga disponible entre los tanques debe ser mayor que cero "
+                    f"(hf = {hf:.4f} m).",
+                )
+                return None
+
+            if tub_nueva.caudal_Q > 0 and not getattr(tub_nueva, "_q_por_energia", False):
+                Q_total_real = self._a_si(tub_nueva.caudal_Q, tub_nueva.u_Q)
+            else:
+                Q_total_real, aceptado = QInputDialog.getDouble(
+                    self,
+                    "Ampliación en paralelo",
+                    "Ingrese el Caudal Total Requerido del sistema (m³/s):",
+                    0.0,
+                    0.0,
+                    1.0e6,
+                    6,
+                )
+                if not aceptado:
+                    return None
+                if Q_total_real <= 0:
+                    QMessageBox.warning(
+                        self, "Datos inválidos", "El caudal total requerido debe ser mayor que cero."
+                    )
+                    return None
+
+            caudales_por_rama = {}
+            q_antiguas_total = 0.0
+            for t_ant in ramas_antiguas:
+                L_si, D_si, eps_si = self._datos_si(t_ant)
+                q_ant = MotorFluidos.calcular_Q(
+                    hf, L_si, D_si, rho, mu, eps_si, t_ant.sumatoria_K, t_ant.sumatoria_Le_D
+                )
+                caudales_por_rama[id(t_ant)] = q_ant
+                q_antiguas_total += q_ant
+
+            Q_nueva = Q_total_real - q_antiguas_total
+            if Q_nueva <= 0:
+                QMessageBox.warning(
+                    self,
+                    "Ampliación innecesaria",
+                    f"Las tuberías existentes ya cubren el caudal requerido "
+                    f"(ΣQ antiguas = {q_antiguas_total:.6g} m³/s ≥ Q total = {Q_total_real:.6g} m³/s).",
+                )
+                return None
+
+            L_nueva_si = self._a_si(tub_nueva.longitud, tub_nueva.u_L)
+            eps_nueva_si = self._a_si(tub_nueva.rugosidad, tub_nueva.u_eps)
+            D_nuevo_si = MotorFluidos.calcular_D(
+                hf,
+                Q_nueva,
+                L_nueva_si,
+                rho,
+                mu,
+                eps_nueva_si,
+                tub_nueva.sumatoria_K,
+                tub_nueva.sumatoria_Le_D,
+            )
+            caudales_por_rama[id(tub_nueva)] = Q_nueva
+
+            tub_nueva.diametro = self._desde_si(D_nuevo_si, tub_nueva.u_D)
+            tub_nueva.actualizar_etiqueta()
+            if self.tuberia_seleccionada is tub_nueva and "D" in self.campos_tuberia:
+                self.campos_tuberia["D"].setText(str(tub_nueva.diametro))
+            tub_nueva._d_por_energia = True
+
+            MotorFluidos.limpiar_iteraciones()
+            _, hf_dist, hf_loc = MotorFluidos.calcular_hf(
+                Q=Q_nueva,
+                L_tub=L_nueva_si,
+                D=D_nuevo_si,
+                rho=rho,
+                mu=mu,
+                epsilon=eps_nueva_si,
+                sumatoria_K=tub_nueva.sumatoria_K,
+                sumatoria_Le_D=tub_nueva.sumatoria_Le_D,
+                registrar=True,
+            )
+
+            for t in ramas:
+                q_rama_si = caudales_por_rama[id(t)]
+                self._guardar_resultado_tuberia(t, q_rama_si, hf, por_energia=True)
+                signo_t = 1 if q_rama_si > 0 else 0
+                if tanque1 is not None:
+                    aplicar_sentido_flujo_ruta(tanque1, [t], signo=signo_t)
+                else:
+                    asignar_sentido_flujo(t, signo_t)
+
+            q_nombres = [f"Q{t.id_tuberia}" if t.id_tuberia is not None else "Q" for t in ramas]
+            self._registrar_exportacion(
+                "Sistema en Paralelo (Ampliación)",
+                [
+                    (
+                        t,
+                        caudales_por_rama[id(t)],
+                        hf,
+                        None,
+                        None,
+                        "diseno_d" if t is tub_nueva else "karman_amp",
+                    )
+                    for t in ramas
+                ],
+                {"Q_total": Q_total_real, "hf_disponible": hf, "Metodo": "Darcy verificado"},
+                ["Q_total = " + " + ".join(q_nombres)],
+                0.0,
+                f"EQUILIBRIO: {tub_nueva.nombre} diseñada con D = {tub_nueva.diametro:.4f} {tub_nueva.u_D} "
+                f"({tub_nueva.diametro:.2f} {tub_nueva.u_D}) para cubrir Q = {tub_nueva.caudal_Q:.4f} {tub_nueva.u_Q}.",
+                ordenar=False,
+                calculos_globales={
+                    f"D ({tub_nueva.nombre}) [m]": D_nuevo_si,
+                },
+            )
+
+            d_u = tub_nueva.diametro
+            u_d = tub_nueva.u_D
+            filas_cad = []
+            re_max = 0.0
+            for t in ramas:
+                q_si_t = caudales_por_rama[id(t)]
+                fila_c, re_t = self._fila_tabla_cad_tuberia(t, q_si_t, hf)
+                filas_cad.append(fila_c)
+                re_max = max(re_max, re_t)
+
+            reg_txt = "Turbulento" if re_max >= 4000 else ("Laminar" if re_max < 2000 else "Transición")
+            reg_col = RPT_ROJO if re_max >= 4000 else RPT_AZUL
+
+            resumen_ant = " + ".join(
+                f"{t.nombre}: <b>{t.caudal_Q:.4f} {t.u_Q}</b>" for t in ramas_antiguas
+            )
+            detalle_amp = (
+                f"Caudal tubería(s) existente(s): {resumen_ant}<br>"
+                f"Caudal asumido por {tub_nueva.nombre}: "
+                f"<b>{tub_nueva.caudal_Q:.4f} {tub_nueva.u_Q}</b> "
+                f"({Q_nueva:.4f} m³/s)<br>"
+                f"Diámetro calculado ({tub_nueva.nombre}): "
+                f"<b>{d_u:.4f} {u_d}</b> (<b>{d_u:.2f} {u_d}</b>)"
+            )
+            if u_d != "m":
+                detalle_amp += f" · <b>{D_nuevo_si:.4f} m ({D_nuevo_si:.2f} m)</b>"
+
+            protagonista = rpt_grid_2x2(
+                [
+                    (
+                        "CAUDAL TOTAL",
+                        "≈",
+                        f"{Q_total_real:.4f}",
+                        "m³/s",
+                        f"{Q_total_real * 1000.0:.2f} L/s",
+                        "#0284c7",
+                    ),
+                    (
+                        "PÉRDIDA HF",
+                        "↘",
+                        f"{hf:.2f}",
+                        "m",
+                        f"ΔP = {hf * rho * 9.81 / 1000.0:.1f} kPa",
+                        "#64748b",
+                    ),
+                    (
+                        "DIÁMETRO DISEÑO",
+                        "⌀",
+                        f"{d_u:.4f}",
+                        u_d,
+                        f"Comercial: {d_u:.2f} {u_d}",
+                        RPT_VERDE,
+                    ),
+                    ("REYNOLDS MÁX", "⚙", formatear_reynolds_html(re_max), "", reg_txt, reg_col),
+                ]
+            )
+            detalle = (
+                rpt_estado("ok", "Ampliación en paralelo dimensionada", detalle_amp)
+                + rpt_seccion_cad("PÉRDIDAS POR RAMAL", "UNIDADES SI")
+                + rpt_tabla(
+                    filas_cad,
+                    ["RAMAL", "Q (M³/S)", "V (M/S)", "F (C-W)", "HF FRIC. (M)"],
+                    ["left", "right", "right", "right", "right"],
+                )
+            )
+            return protagonista, detalle, hf, hf_dist, hf_loc
+
+        datos = [self._datos_si(t) for t in ramas]
+        q_ingresados = [self._a_si(t.caudal_Q, t.u_Q) for t in ramas]
+
+        if all(q > 0 for q in q_ingresados):
+            Q_total_real = sum(q_ingresados)
+        elif q_ingresados[0] > 0 and all(q == 0 for q in q_ingresados[1:]):
+            Q_total_real = q_ingresados[0]
+        else:
+            Q_total_real, aceptado = QInputDialog.getDouble(
+                self,
+                "Sistema en paralelo",
+                "Ingrese el Caudal Total del sistema (m³/s):",
+                0.0,
+                0.0,
+                1.0e6,
+                6,
+            )
+            if not aceptado:
+                return None
+            if Q_total_real <= 0:
+                QMessageBox.warning(self, "Datos inválidos", "El caudal total debe ser mayor que cero.")
+                return None
+
+        dialogo = DialogoSuposicionParalelo(ramas, Q_total_real, self)
+        if dialogo.exec_() != QDialog.Accepted:
+            return None
+        indice, Q_supuesto = dialogo.valores()
+        tuberia_elegida = ramas[indice]
+
+        MotorFluidos.limpiar_iteraciones()
+        hf_sup, _, _ = self._hf_tuberia(
+            tuberia_elegida, Q_supuesto, registrar=True
+        )
+
+        tramos = [dict(L=L, D=D, eps=eps, K=t.sumatoria_K, LeD=t.sumatoria_Le_D)
+                  for t, (L, D, eps) in zip(ramas, datos)]
+        resultado = MotorFluidos.resolver_paralelo(tramos, Q_total_real, rho, mu, hf_inicial=hf_sup)
+        hf, Q_reales, perdidas = resultado
+        # Se conserva el formato del informe; el desglose mostrado corresponde
+        # a la rama elegida, recalculado al caudal final, como su carga común.
+        _, hf_dist, hf_loc = perdidas[indice]
+        Q_sup = [Q_supuesto if t is tuberia_elegida else None for t in ramas]
+        calculos = [(t, q, *p) for t, q, p in zip(ramas, Q_reales, perdidas)]
+        for tuberia, Q_si, hf_t, dist_t, loc_t in calculos:
+            self._guardar_resultado_tuberia(tuberia, Q_si, hf_t, por_energia=True, hf_dist=dist_t, hf_loc=loc_t)
+            signo_t = 1 if Q_si > 0 else 0
+            if tanque1 is not None:
+                aplicar_sentido_flujo_ruta(tanque1, [tuberia], signo=signo_t)
+            else:
+                asignar_sentido_flujo(tuberia, signo_t)
+
+        q_nombres = [f"Q{t.id_tuberia}" if t.id_tuberia is not None else "Q" for t in ramas]
+        self._registrar_exportacion(
+            "Sistema en Paralelo",
+            [
+                (
+                    t,
+                    q,
+                    hf,
+                    q_s,
+                    hf_sup,
+                    "par_sup" if t is tuberia_elegida else "par_karman",
+                )
+                for t, q, q_s in zip(ramas, Q_reales, Q_sup)
+            ],
+            {
+                "Hj": None,
+                "Hk": None,
+                "Tub_Supuesta": tuberia_elegida.nombre,
+                "Q_supuesto": Q_supuesto,
+                "Iteraciones": resultado.iteraciones,
+                "Metodo": "Darcy verificado",
+                "Residuo_masa_relativo": resultado.residuo_masa_relativo,
+                "Residuo_energia_relativo": resultado.residuo_energia_relativo,
+                "Q_total": Q_total_real,
+            },
+            ["Q_total = " + " + ".join(q_nombres)],
+            Q_total_real - sum(Q_reales),
+            "EQUILIBRIO: la suma de los caudales de las ramas reproduce el caudal total "
+            f"(pérdida común hf = {hf:.4f} m).",
+            ordenar=False,
+        )
+
+        filas_cad = []
+        re_max = 0.0
+        for t, q, _, _, _ in calculos:
+            fila_c, re_t = self._fila_tabla_cad_tuberia(t, q, hf)
+            filas_cad.append(fila_c)
+            re_max = max(re_max, re_t)
+
+        reg_txt = "Turbulento" if re_max >= 4000 else ("Laminar" if re_max < 2000 else "Transición")
+        reg_col = RPT_ROJO if re_max >= 4000 else RPT_AZUL
+
+        reparto = " · ".join(
+            f"<b>Q{i} = {t.caudal_Q:.4f} {t.u_Q}</b> ({100 * q / Q_total_real:.1f}%)"
+            for i, (t, q, *_) in enumerate(calculos, start=1)
+        ) + (
+            f"<br>Suposición en {tuberia_elegida.nombre}: Q' = {Q_supuesto:.4g} m³/s "
+            f"· bisección: <b>{resultado.iteraciones} iteraciones</b>."
+        )
+        protagonista = rpt_grid_2x2(
+            [
+                (
+                    "CAUDAL TOTAL",
+                    "≈",
+                    f"{Q_total_real:.4f}",
+                    "m³/s",
+                    f"{Q_total_real * 1000.0:.2f} L/s",
+                    "#0284c7",
+                ),
+                (
+                    "PÉRDIDA HF",
+                    "↘",
+                    f"{hf:.2f}",
+                    "m",
+                    f"ΔP = {hf * rho * 9.81 / 1000.0:.1f} kPa",
+                    "#64748b",
+                ),
+                (
+                    "ITERACIONES",
+                    "⚙",
+                    str(resultado.iteraciones),
+                    "",
+                    f"Q' sup = {Q_supuesto:.4g} m³/s",
+                    "#0284c7",
+                ),
+                ("REYNOLDS MÁX", "⚙", formatear_reynolds_html(re_max), "", reg_txt, reg_col),
+            ]
+        )
+        detalle = (
+            rpt_estado("ok", "Flujo en paralelo equilibrado", reparto)
+            + rpt_seccion_cad("PÉRDIDAS POR RAMAL", "UNIDADES SI")
+            + rpt_tabla(
+                filas_cad,
+                ["RAMAL", "Q (M³/S)", "V (M/S)", "F (C-W)", "HF FRIC. (M)"],
+                ["left", "right", "right", "right", "right"],
+            )
+        )
+        return protagonista, detalle, hf, hf_dist, hf_loc
+
+    def _descomponer_paralelo_serie(self, rutas, tanque1, tanque2):
+        """Descompone rutas entre dos tanques en un árbol Serie-Paralelo sin puentes cruzados."""
+        if not rutas or len(rutas) < 2:
+            return None
+
+        orientacion = {}
+        for ruta in rutas:
+            actual = tanque1
+            for tub in ruta:
+                if tub.nodo_origen is actual:
+                    sig = tub.nodo_destino
+                elif tub.nodo_destino is actual:
+                    sig = tub.nodo_origen
+                else:
+                    return None
+                prev = orientacion.get(id(tub))
+                if prev is not None and (prev[0] is not actual or prev[1] is not sig):
+                    return None
+                orientacion[id(tub)] = (actual, sig, tub)
+                actual = sig
+            if actual is not tanque2:
+                return None
+
+        bloques = [
+            {
+                "tipo": "tramo",
+                "origen": u,
+                "destino": v,
+                "tuberia": tub,
+                "tuberias": [tub],
+            }
+            for u, v, tub in orientacion.values()
+        ]
+
+        cambio = True
+        while cambio:
+            cambio = False
+            # 1. Fusionar bloques estrictamente paralelos entre los mismos extremos
+            grupos = {}
+            orden_claves = []
+            for b in bloques:
+                clave = (id(b["origen"]), id(b["destino"]))
+                if clave not in grupos:
+                    grupos[clave] = []
+                    orden_claves.append(clave)
+                grupos[clave].append(b)
+            nuevos = []
+            for clave in orden_claves:
+                grupo = grupos[clave]
+                if len(grupo) >= 2:
+                    cambio = True
+                    ramas_flat = []
+                    tubs_flat = []
+                    for b in grupo:
+                        if b["tipo"] == "paralelo":
+                            ramas_flat.extend(b["ramas"])
+                        else:
+                            ramas_flat.append(b)
+                        tubs_flat.extend(b["tuberias"])
+                    nuevos.append(
+                        {
+                            "tipo": "paralelo",
+                            "origen": grupo[0]["origen"],
+                            "destino": grupo[0]["destino"],
+                            "ramas": ramas_flat,
+                            "tuberias": tubs_flat,
+                        }
+                    )
+                else:
+                    nuevos.append(grupo[0])
+            bloques = nuevos
+
+            # 2. Fusionar nodos internos con grado de entrada 1 y salida 1
+            inc_in = {}
+            inc_out = {}
+            for b in bloques:
+                inc_out.setdefault(id(b["origen"]), []).append(b)
+                inc_in.setdefault(id(b["destino"]), []).append(b)
+
+            for b_in_list in inc_in.values():
+                if len(b_in_list) != 1:
+                    continue
+                b1 = b_in_list[0]
+                nodo_v = b1["destino"]
+                if nodo_v is tanque1 or nodo_v is tanque2:
+                    continue
+                b_out_list = inc_out.get(id(nodo_v), [])
+                if len(b_out_list) != 1:
+                    continue
+                b2 = b_out_list[0]
+                if b1 is b2 or b1["origen"] is b2["destino"]:
+                    continue
+                hijos = []
+                nodos_ser = []
+                for parte in (b1, b2):
+                    if parte["tipo"] == "serie":
+                        hijos.extend(parte["hijos"])
+                    else:
+                        hijos.append(parte)
+                if b1["tipo"] == "serie":
+                    nodos_ser.extend(b1["nodos_internos"])
+                nodos_ser.append(nodo_v)
+                if b2["tipo"] == "serie":
+                    nodos_ser.extend(b2["nodos_internos"])
+                b_merged = {
+                    "tipo": "serie",
+                    "origen": b1["origen"],
+                    "destino": b2["destino"],
+                    "hijos": hijos,
+                    "nodos_internos": nodos_ser,
+                    "tuberias": b1["tuberias"] + b2["tuberias"],
+                }
+                bloques = [b for b in bloques if b is not b1 and b is not b2] + [b_merged]
+                cambio = True
+                break
+
+        if len(bloques) != 1:
+            return None
+        raiz = bloques[0]
+        if raiz["origen"] is not tanque1 or raiz["destino"] is not tanque2:
+            return None
+        if len(raiz["tuberias"]) != len(orientacion):
+            return None
+
+        ramas_paralelas = []
+        tuberias_serie = []
+        tiene_serie = False
+        tiene_paralelo = False
+
+        def _recolectar(b, dentro_paralelo=False):
+            nonlocal tiene_serie, tiene_paralelo
+            if b["tipo"] == "tramo":
+                if dentro_paralelo:
+                    ramas_paralelas.append(b["tuberia"])
+                else:
+                    tuberias_serie.append(b["tuberia"])
+            elif b["tipo"] == "serie":
+                tiene_serie = True
+                for h in b["hijos"]:
+                    _recolectar(h, dentro_paralelo=dentro_paralelo)
+            elif b["tipo"] == "paralelo":
+                tiene_paralelo = True
+                for r in b["ramas"]:
+                    _recolectar(r, dentro_paralelo=True)
+
+        _recolectar(raiz)
+        if not (tiene_serie and tiene_paralelo):
+            return None
+
+        es_clasico = (
+            raiz["tipo"] == "serie"
+            and len(raiz["hijos"]) == 2
+            and len(ramas_paralelas) >= 2
+            and len(tuberias_serie) == 1
+            and all(len(r) == 2 for r in rutas)
+            and any(
+                h["tipo"] == "paralelo" and all(rm["tipo"] == "tramo" for rm in h["ramas"])
+                for h in raiz["hijos"]
+            )
+        )
+        return {
+            "raiz": raiz,
+            "ramas_paralelas": ramas_paralelas,
+            "tuberias_serie": tuberias_serie,
+            "tub_serie_clasica": tuberias_serie[0] if es_clasico else None,
+            "es_clasico_2_tramos": es_clasico,
+        }
+
+    def _resolver_paralelo_serie_general(self, descomp, tanque1, tanque2):
+        """Resuelve redes mixtas Serie-Paralelo generales con múltiples tramos, bloques o nudos."""
+        MotorFluidos.limpiar_iteraciones()
+        raiz = descomp["raiz"]
+        todas = list(raiz["tuberias"])
+        if any(t.caudal_Q < 0 for t in todas):
+            QMessageBox.warning(self, "Datos inválidos", "El caudal Q no puede ser negativo.")
+            return None
+        if any(t.diametro < 0 for t in todas):
+            QMessageBox.warning(self, "Datos inválidos", "El diámetro D no puede ser negativo.")
+            return None
+        if any(t.diametro == 0 for t in todas):
+            QMessageBox.warning(
+                self,
+                "Datos insuficientes",
+                "En redes mixtas con múltiples tramos o nudos, ingresa todos los diámetros (D > 0).",
+            )
+            return None
+
+        rho, mu = self.fluido_rho, self.fluido_mu
+        gamma = rho * MotorFluidos.g
+        P1 = 0.0 if tanque1.abierto_atmosfera else tanque1.presion_P
+        P2 = 0.0 if tanque2.abierto_atmosfera else tanque2.presion_P
+        H_1 = tanque1.elevacion_z + P1 / gamma
+        H_2 = tanque2.elevacion_z + P2 / gamma
+        delta_H_tanques = H_1 - H_2
+
+        def _a_bloque_si(b):
+            if b["tipo"] == "tramo":
+                t = b["tuberia"]
+                L_si, D_si, eps_si = self._datos_si(t)
+                if L_si <= 0:
+                    raise ValueError(f"{t.nombre}: L debe ser mayor que cero.")
+                return {
+                    "tipo": "tramo",
+                    "origen": b["origen"],
+                    "destino": b["destino"],
+                    "tuberia": t,
+                    "L": L_si,
+                    "D": D_si,
+                    "eps": eps_si,
+                    "K": float(getattr(t, "sumatoria_K", 0.0)),
+                    "LeD": float(getattr(t, "sumatoria_Le_D", 0.0)),
+                }
+            if b["tipo"] == "serie":
+                return {
+                    "tipo": "serie",
+                    "origen": b["origen"],
+                    "destino": b["destino"],
+                    "hijos": [_a_bloque_si(h) for h in b["hijos"]],
+                }
+            return {
+                "tipo": "paralelo",
+                "origen": b["origen"],
+                "destino": b["destino"],
+                "ramas": [_a_bloque_si(r) for r in b["ramas"]],
+            }
+
+        bloque_si = _a_bloque_si(raiz)
+
+        # Determinar Q_total si fue ingresado, o resolver por energía disponible (H_1 > H_2)
+        def _q_usuario(t):
+            if t.caudal_Q > 0 and not getattr(t, "_q_por_energia", False):
+                return self._a_si(t.caudal_Q, t.u_Q)
+            return 0.0
+
+        q_series = [(t, _q_usuario(t)) for t in descomp["tuberias_serie"] if _q_usuario(t) > 0]
+        Q_total_real = None
+        conflicto_q = False
+        fuente_nombre = ""
+        if q_series:
+            Q_total_real = q_series[0][1]
+            fuente_nombre = q_series[0][0].nombre
+            conflicto_q = any(
+                abs(q - Q_total_real) > 1e-8 * Q_total_real for _, q in q_series
+            )
+        else:
+            # Revisar si algún bloque paralelo tiene caudales en todas sus ramas
+            def _buscar_corte_paralelo(b):
+                if b["tipo"] == "paralelo":
+                    qs = []
+                    for r in b["ramas"]:
+                        q_r = next((_q_usuario(tb) for tb in r["tuberias"] if _q_usuario(tb) > 0), 0.0)
+                        qs.append(q_r)
+                    if all(q > 0 for q in qs):
+                        return sum(qs)
+                    for r in b["ramas"]:
+                        sub = _buscar_corte_paralelo(r)
+                        if sub is not None:
+                            return sub
+                elif b["tipo"] == "serie":
+                    for h in b["hijos"]:
+                        sub = _buscar_corte_paralelo(h)
+                        if sub is not None:
+                            return sub
+                return None
+
+            Q_total_real = _buscar_corte_paralelo(raiz)
+
+        modo_energia = False
+        if Q_total_real is None:
+            q_pista = next((_q_usuario(t) for t in todas if _q_usuario(t) > 0), 0.0)
+            if delta_H_tanques > 0 and q_pista == 0.0:
+                modo_energia = True
+            else:
+                Q_total_real, aceptado = QInputDialog.getDouble(
+                    self,
+                    "Sistema Mixto (Paralelo - Serie)",
+                    "Ingrese el Caudal Total del sistema (m³/s):",
+                    q_pista,
+                    0.0,
+                    1.0e6,
+                    6,
+                )
+                if not aceptado:
+                    return None
+                if Q_total_real <= 0:
+                    QMessageBox.warning(
+                        self, "Datos inválidos", "El caudal total debe ser mayor que cero."
+                    )
+                    return None
+
+        if modo_energia:
+            resultado = MotorFluidos.resolver_paralelo_serie(
+                bloque_si, rho, mu, H_disponible=delta_H_tanques, H_inicio=H_1
+            )
+        else:
+            resultado = MotorFluidos.resolver_paralelo_serie(
+                bloque_si, rho, mu, Q_total=Q_total_real, H_inicio=H_1
+            )
+        resultado.verificar()
+        Q_total_real, hf_total, resultados_tramos, H_nodos = resultado
+
+        hf_dist_total = 0.0
+        hf_loc_total = 0.0
+        filas_cad = []
+        re_max = 0.0
+        items_export = []
+        ramas_par_set = {id(t) for t in descomp["ramas_paralelas"]}
+
+        for res_t in resultados_tramos:
+            tub = res_t["tuberia"]
+            q_t = res_t["Q"]
+            hf_t = res_t["hf"]
+            dist_t = res_t["hf_dist"]
+            loc_t = res_t["hf_loc"]
+            hf_dist_total += dist_t
+            hf_loc_total += loc_t
+
+            self._guardar_resultado_tuberia(
+                tub, q_t, hf_t, por_energia=True, hf_dist=dist_t, hf_loc=loc_t
+            )
+            aplicar_sentido_flujo_ruta(res_t["origen"], [tub], signo=(1 if q_t > 0 else 0))
+
+            rol_t = "par_karman" if id(tub) in ramas_par_set else "serie_colebrook"
+            items_export.append((tub, q_t, hf_t, None, None, rol_t))
+            fila_c, re_t = self._fila_tabla_cad_tuberia(tub, q_t, hf_t)
+            filas_cad.append(fila_c)
+            re_max = max(re_max, re_t)
+
+        filas_nudos = [[tanque1.nombre, "Reservorio entrada", rpt_num(f"{H_1:.4f} m")]]
+        nudos_export = {}
+        for nodo_obj, h_val in H_nodos.items():
+            if isinstance(nodo_obj, NodoUnionGrafico):
+                nodo_obj.hj_calculada = float(h_val)
+                nodo_obj.actualizar_etiqueta()
+                rol_n = "Nudo de unión"
+            else:
+                rol_n = "Accesorio / Paso"
+            nombre_n = getattr(nodo_obj, "nombre", str(nodo_obj))
+            filas_nudos.append([nombre_n, rol_n, rpt_num(f"{h_val:.4f} m")])
+            nudos_export[f"H ({nombre_n}) [m]"] = float(h_val)
+        filas_nudos.append(
+            [tanque2.nombre, "Llegada calculada", rpt_num(f"{H_1 - hf_total:.4f} m")]
+        )
+
+        h_W_req = hf_total - delta_H_tanques
+        self._registrar_exportacion(
+            "Sistema Mixto (Paralelo-Serie)",
+            items_export,
+            {
+                "Modo_Calculo": "Por energía" if modo_energia else "Por caudal Q",
+                "Iteraciones": resultado.iteraciones,
+                "Residuo_masa_relativo": resultado.residuo_masa_relativo,
+                "Residuo_energia_relativo": resultado.residuo_energia_relativo,
+                "Q_total": Q_total_real,
+            },
+            [f"Q_total = {Q_total_real:.6g} m³/s"],
+            float(resultado.residuo_masa),
+            f"EQUILIBRIO: Q_total = {Q_total_real:.6g} m³/s · hf_total = {hf_total:.4f} m · ΔH disponible = {delta_H_tanques:.4f} m.",
+            ordenar=False,
+            calculos_globales={"hf_total [m]": hf_total, "Q_total [m³/s]": Q_total_real, **nudos_export},
+        )
+
+        reg_txt = "Turbulento" if re_max >= 4000 else ("Laminar" if re_max < 2000 else "Transición")
+        reg_col = RPT_ROJO if re_max >= 4000 else RPT_AZUL
+
+        if h_W_req > 0.1:
+            celda_3 = (
+                "CARGA H_W",
+                "⚡",
+                f"{h_W_req:.4f}",
+                "m",
+                "Bomba requerida",
+                RPT_NARANJA,
+            )
+            estado_html = rpt_estado(
+                "aviso",
+                "Sistema mixto resuelto (requiere bomba)",
+                f"Caudal total: <b>{Q_total_real:.4f} m³/s</b> · Pérdida total: <b>{hf_total:.4f} m</b>.<br>"
+                f"Para vencer ΔH = {delta_H_tanques:.4f} m se requiere carga adicional <b>H<sub>W</sub> = {h_W_req:.4f} m</b>.",
+            )
+        else:
+            celda_3 = (
+                "ITERACIONES",
+                "⚙",
+                str(resultado.iteraciones),
+                "",
+                "Por energía disponible" if modo_energia else "Con Q impuesto",
+                "#0284c7",
+            )
+            sub_txt = (
+                f"Equilibrio por gravedad con <b>H<sub>1</sub> − H<sub>2</sub> = {delta_H_tanques:.4f} m</b>."
+                if modo_energia
+                else f"Flujo equilibrado por gravedad (excedente = <b>{max(0.0, -h_W_req):.4f} m</b>)."
+            )
+            estado_html = rpt_estado("ok", "Sistema mixto (Paralelo - Serie) equilibrado", sub_txt)
+
+        if conflicto_q:
+            estado_html = (
+                rpt_estado(
+                    "aviso",
+                    "Había caudales distintos en serie",
+                    f"Se utilizó el caudal de {fuente_nombre} ({Q_total_real:.4g} m³/s) como caudal total del tronco.",
+                )
+                + estado_html
+            )
+
+        protagonista = rpt_grid_2x2(
+            [
+                (
+                    "CAUDAL TOTAL",
+                    "≈",
+                    f"{Q_total_real:.4f}",
+                    "m³/s",
+                    f"{Q_total_real * 1000.0:.2f} L/s",
+                    "#0284c7",
+                ),
+                (
+                    "PÉRDIDA ΣHF",
+                    "↘",
+                    f"{hf_total:.2f}",
+                    "m",
+                    f"ΔP = {hf_total * rho * 9.81 / 1000.0:.1f} kPa",
+                    "#64748b",
+                ),
+                celda_3,
+                ("REYNOLDS MÁX", "⚙", formatear_reynolds_html(re_max), "", reg_txt, reg_col),
+            ]
+        )
+        detalle = (
+            estado_html
+            + rpt_seccion_cad("ALTURAS PIEZOMÉTRICAS EN NUDOS", "ENERGÍA")
+            + rpt_tabla(
+                filas_nudos,
+                ["PUNTO / NUDO", "ROL", "COTA PIEZOMÉTRICA H"],
+                ["left", "left", "right"],
+            )
+            + rpt_seccion_cad("PÉRDIDAS POR RAMAL Y TRAMO", "UNIDADES SI")
+            + rpt_tabla(
+                filas_cad,
+                ["RAMAL", "Q (M³/S)", "V (M/S)", "F (C-W)", "HF FRIC. (M)"],
+                ["left", "right", "right", "right", "right"],
+            )
+        )
+        return protagonista, detalle, hf_total, hf_dist_total, hf_loc_total
+
+    def _resolver_paralelo_serie(self, ramas_paralelas, tub_serie, tanque1, tanque2, descomposicion=None):
+        descomp = descomposicion
+        if descomp is None and tanque1 is not None and tanque2 is not None:
+            descomp = self._descomponer_paralelo_serie(
+                self._encontrar_ruta(tanque1, tanque2), tanque1, tanque2
+            )
+        if descomp is not None and (not descomp.get("es_clasico_2_tramos") or tub_serie is None):
+            return self._resolver_paralelo_serie_general(descomp, tanque1, tanque2)
+
+        MotorFluidos.limpiar_iteraciones()
+        todas = list(ramas_paralelas) + [tub_serie]
+        if any(t.caudal_Q < 0 for t in todas):
+            QMessageBox.warning(self, "Datos inválidos", "El caudal Q no puede ser negativo.")
+            return None
+        if any(t.diametro < 0 for t in todas):
+            QMessageBox.warning(self, "Datos inválidos", "El diámetro D no puede ser negativo.")
+            return None
+
+        rho, mu = self.fluido_rho, self.fluido_mu
+        datos_par = [self._datos_si(t) for t in ramas_paralelas]
+        L_serie_si = self._a_si(tub_serie.longitud, tub_serie.u_L)
+        eps_serie_si = self._a_si(tub_serie.rugosidad, tub_serie.u_eps)
+        if L_serie_si <= 0:
+            raise ValueError(f"{tub_serie.nombre}: L debe ser mayor que cero.")
+
+        # 1. Determinar Caudal Total (Q_total)
+        if tub_serie.caudal_Q > 0 and not getattr(tub_serie, "_q_por_energia", False):
+            Q_total_real = self._a_si(tub_serie.caudal_Q, tub_serie.u_Q)
+        else:
+            q_ramas = [
+                self._a_si(r.caudal_Q, r.u_Q)
+                if not getattr(r, "_q_por_energia", False)
+                else 0.0
+                for r in ramas_paralelas
+            ]
+            if all(q > 0 for q in q_ramas):
+                Q_total_real = sum(q_ramas)
+            elif q_ramas[0] > 0 and all(q == 0 for q in q_ramas[1:]):
+                Q_total_real = q_ramas[0]
+            else:
+                Q_total_real, aceptado = QInputDialog.getDouble(
+                    self,
+                    "Sistema Mixto (Paralelo - Serie)",
+                    "Ingrese el Caudal Total del sistema (m³/s):",
+                    0.0,
+                    0.0,
+                    1.0e6,
+                    6,
+                )
+                if not aceptado:
+                    return None
+                if Q_total_real <= 0:
+                    QMessageBox.warning(
+                        self, "Datos inválidos", "El caudal total debe ser mayor que cero."
+                    )
+                    return None
+
+        # 2. Preparar la semilla; el motor resuelve la carga común por bisección.
+        dialogo = DialogoSuposicionParalelo(ramas_paralelas, Q_total_real, self)
+        if dialogo.exec_() != QDialog.Accepted:
+            return None
+        indice, Q_supuesto = dialogo.valores()
+        tuberia_elegida = ramas_paralelas[indice]
+
+        MotorFluidos.limpiar_iteraciones()
+        hf_sup, _, _ = self._hf_tuberia(
+            tuberia_elegida, Q_supuesto, registrar=True
+        )
+
+        tramos = [dict(L=L, D=D, eps=eps, K=t.sumatoria_K, LeD=t.sumatoria_Le_D)
+                  for t, (L, D, eps) in zip(ramas_paralelas, datos_par)]
+        resultado = MotorFluidos.resolver_paralelo(tramos, Q_total_real, rho, mu, hf_inicial=hf_sup)
+        hf_par, Q_reales, perdidas = resultado
+        _, hf_dist_par, hf_loc_par = perdidas[indice]
+        Q_sup = [Q_supuesto if t is tuberia_elegida else None for t in ramas_paralelas]
+        for tuberia, q_rama, (hf_t, dist_t, loc_t) in zip(ramas_paralelas, Q_reales, perdidas):
+            self._guardar_resultado_tuberia(tuberia, q_rama, hf_t, por_energia=True,
+                                          hf_dist=dist_t, hf_loc=loc_t)
+
+        # 3. Resolver la tubería en serie (lleva Q_3 = Q_total_real)
+        gamma = rho * MotorFluidos.g
+        P1 = 0.0 if tanque1.abierto_atmosfera else tanque1.presion_P
+        P2 = 0.0 if tanque2.abierto_atmosfera else tanque2.presion_P
+        H_1 = tanque1.elevacion_z + P1 / gamma
+        H_2 = tanque2.elevacion_z + P2 / gamma
+        delta_H_tanques = H_1 - H_2
+
+        diseno_d_serie = False
+        if tub_serie.diametro > 0:
+            D_serie_si = self._a_si(tub_serie.diametro, tub_serie.u_D)
+            hf_serie, hf_dist_serie, hf_loc_serie = MotorFluidos.calcular_hf(
+                Q=Q_total_real,
+                L_tub=L_serie_si,
+                D=D_serie_si,
+                rho=rho,
+                mu=mu,
+                epsilon=eps_serie_si,
+                sumatoria_K=tub_serie.sumatoria_K,
+                sumatoria_Le_D=tub_serie.sumatoria_Le_D,
+                registrar=True,
+            )
+        else:
+            diseno_d_serie = True
+            sugerido = max(0.0, delta_H_tanques - hf_par)
+            hf_serie, aceptado = QInputDialog.getDouble(
+                self,
+                f"Diseño de {tub_serie.nombre} (en serie)",
+                "Ingrese la pérdida de carga hf conocida en la tubería en serie (m):",
+                sugerido,
+                0.0,
+                1.0e6,
+                4,
+            )
+            if not aceptado:
+                return None
+            if hf_serie <= 0:
+                QMessageBox.warning(
+                    self,
+                    "Datos inválidos",
+                    "La pérdida de carga hf en la tubería en serie debe ser mayor que cero.",
+                )
+                return None
+
+            D_serie_si = MotorFluidos.calcular_D(
+                hf_serie,
+                Q_total_real,
+                L_serie_si,
+                rho,
+                mu,
+                eps_serie_si,
+                tub_serie.sumatoria_K,
+                tub_serie.sumatoria_Le_D,
+            )
+            tub_serie.diametro = self._desde_si(D_serie_si, tub_serie.u_D)
+            tub_serie.actualizar_etiqueta()
+            if self.tuberia_seleccionada is tub_serie and "D" in self.campos_tuberia:
+                self.campos_tuberia["D"].setText(str(tub_serie.diametro))
+            tub_serie._d_por_energia = True
+
+            _, hf_dist_serie, hf_loc_serie = MotorFluidos.calcular_hf(
+                Q=Q_total_real,
+                L_tub=L_serie_si,
+                D=D_serie_si,
+                rho=rho,
+                mu=mu,
+                epsilon=eps_serie_si,
+                sumatoria_K=tub_serie.sumatoria_K,
+                sumatoria_Le_D=tub_serie.sumatoria_Le_D,
+                registrar=True,
+            )
+
+        self._guardar_resultado_tuberia(
+            tub_serie,
+            Q_total_real,
+            hf_serie,
+            por_energia=True,
+            hf_dist=hf_dist_serie,
+            hf_loc=hf_loc_serie,
+        )
+        if tanque1 in (tub_serie.nodo_origen, tub_serie.nodo_destino):
+            aplicar_sentido_flujo_ruta(tanque1, [tub_serie], signo=(1 if Q_total_real > 0 else 0))
+            for r, q_rama in zip(ramas_paralelas, Q_reales):
+                aplicar_sentido_flujo_ruta(tanque2, [r], signo=(-1 if q_rama > 0 else 0))
+        else:
+            aplicar_sentido_flujo_ruta(tanque2, [tub_serie], signo=(-1 if Q_total_real > 0 else 0))
+            for r, q_rama in zip(ramas_paralelas, Q_reales):
+                aplicar_sentido_flujo_ruta(tanque1, [r], signo=(1 if q_rama > 0 else 0))
+
+        hf_total = hf_par + hf_serie
+        hf_dist_total = hf_dist_par + hf_dist_serie
+        hf_loc_total = hf_loc_par + hf_loc_serie
+
+        q_nombres_par = [
+            f"Q{t.id_tuberia}" if t.id_tuberia is not None else "Q" for t in ramas_paralelas
+        ]
+        q_nombre_ser = (
+            f"Q{tub_serie.id_tuberia}" if tub_serie.id_tuberia is not None else "Q_serie"
+        )
+        self._registrar_exportacion(
+            "Sistema Mixto (Paralelo-Serie)",
+            [
+                (
+                    t,
+                    q,
+                    hf_par,
+                    q_s,
+                    hf_sup,
+                    "par_sup" if t is tuberia_elegida else "par_karman",
+                )
+                for t, q, q_s in zip(ramas_paralelas, Q_reales, Q_sup)
+            ]
+            + [
+                (
+                    tub_serie,
+                    Q_total_real,
+                    hf_serie,
+                    None,
+                    None,
+                    "serie_diseno_d" if diseno_d_serie else "serie_colebrook",
+                )
+            ],
+            {
+                "Tub_Supuesta": tuberia_elegida.nombre,
+                "Q_supuesto": Q_supuesto,
+                "Iteraciones": resultado.iteraciones,
+                "Metodo": "Darcy verificado",
+                "Residuo_masa_relativo": resultado.residuo_masa_relativo,
+                "Residuo_energia_relativo": resultado.residuo_energia_relativo,
+                "Q_total": Q_total_real,
+                "hf_serie": hf_serie if diseno_d_serie else None,
+            },
+            [f"{q_nombre_ser} = " + " + ".join(q_nombres_par)],
+            0.0,
+            f"EQUILIBRIO: {q_nombre_ser} = {Q_total_real:.6g} m³/s · "
+            f"hf_paralelo = {hf_par:.4f} m · hf_serie = {hf_serie:.4f} m · "
+            f"D_serie = {tub_serie.diametro:.4f} {tub_serie.u_D} ({tub_serie.diametro:.2f} {tub_serie.u_D}).",
+            ordenar=False,
+            calculos_globales={
+                "hf_paralelo [m]": hf_par,
+                "hf_serie [m]": hf_serie,
+                f"D ({tub_serie.nombre}) [m]": D_serie_si,
+            },
+        )
+
+        d_s_u = tub_serie.diametro
+        u_d_s = tub_serie.u_D
+        filas_cad = []
+        re_max = 0.0
+        for t, q in zip(ramas_paralelas, Q_reales):
+            fila_c, re_t = self._fila_tabla_cad_tuberia(t, q, hf_par)
+            filas_cad.append(fila_c)
+            re_max = max(re_max, re_t)
+        fila_s, re_s = self._fila_tabla_cad_tuberia(tub_serie, Q_total_real, hf_serie)
+        filas_cad.append(fila_s)
+        re_max = max(re_max, re_s)
+
+        reg_txt = "Turbulento" if re_max >= 4000 else ("Laminar" if re_max < 2000 else "Transición")
+        reg_col = RPT_ROJO if re_max >= 4000 else RPT_AZUL
+
+        reparto_txt = " · ".join(
+            f"Q{t.id_tuberia or i} = <b>{t.caudal_Q:.4f} {t.u_Q}</b>"
+            for i, t in enumerate(ramas_paralelas, start=1)
+        )
+        resumen_estado = (
+            f"<b>Sección en paralelo:</b> {reparto_txt} (hf<sub>par</sub> = {hf_par:.4f} m, "
+            f"{resultado.iteraciones} iteraciones)<br>"
+            f"<b>Sección en serie ({tub_serie.nombre}):</b> "
+            f"Q = <b>{tub_serie.caudal_Q:.4f} {tub_serie.u_Q}</b> · "
+            f"hf = <b>{hf_serie:.4f} m</b> · "
+            f"D = <b>{d_s_u:.4f} {u_d_s} ({d_s_u:.2f} {u_d_s})</b>"
+        )
+
+        if diseno_d_serie:
+            card_3 = (
+                "DIÁMETRO DISEÑO",
+                "⌀",
+                f"{d_s_u:.4f}",
+                u_d_s,
+                f"Comercial: {d_s_u:.2f} {u_d_s}",
+                RPT_VERDE,
+            )
+        else:
+            card_3 = (
+                "ITERACIONES",
+                "⚙",
+                str(resultado.iteraciones),
+                "",
+                f"Q' sup = {Q_supuesto:.4g} m³/s",
+                "#0284c7",
+            )
+
+        protagonista = rpt_grid_2x2(
+            [
+                (
+                    "CAUDAL TOTAL",
+                    "≈",
+                    f"{Q_total_real:.4f}",
+                    "m³/s",
+                    f"{Q_total_real * 1000.0:.2f} L/s",
+                    "#0284c7",
+                ),
+                (
+                    "PÉRDIDA HF",
+                    "↘",
+                    f"{hf_total:.2f}",
+                    "m",
+                    f"Par: {hf_par:.2f} m + Serie: {hf_serie:.2f} m",
+                    "#64748b",
+                ),
+                card_3,
+                ("REYNOLDS MÁX", "⚙", formatear_reynolds_html(re_max), "", reg_txt, reg_col),
+            ]
+        )
+        detalle = (
+            rpt_estado("ok", "Sistema mixto (Paralelo - Serie) resuelto", resumen_estado)
+            + rpt_seccion_cad("PÉRDIDAS POR RAMAL Y TRAMO", "UNIDADES SI")
+            + rpt_tabla(
+                filas_cad,
+                ["RAMAL", "Q (M³/S)", "V (M/S)", "F (C-W)", "HF FRIC. (M)"],
+                ["left", "right", "right", "right", "right"],
+            )
+        )
+        return protagonista, detalle, hf_total, hf_dist_total, hf_loc_total
+

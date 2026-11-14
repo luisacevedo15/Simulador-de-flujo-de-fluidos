@@ -1,0 +1,653 @@
+{
+  "caso": "e_dos_bombas_paralelo",
+  "version_captura": 1,
+  "fluido": {
+    "rho": 1000.0,
+    "mu": 0.001,
+    "g": 9.81,
+    "P_atm": 101325.0,
+    "P_vap": 2339.0
+  },
+  "unidades": {
+    "Q": "m3/s",
+    "v": "m/s",
+    "L_D_eps": "m",
+    "hf_H_EGL_HGL_NPSH": "m",
+    "presion": "Pa",
+    "potencia": "W",
+    "eficiencia": "fraccion",
+    "Re_f_K_LeD": "adimensional"
+  },
+  "tolerancias": {
+    "relativa_motor": 1e-08,
+    "interna_motor": 1e-11,
+    "Re_limite_laminar": 2000
+  },
+  "fuentes_sha256": {
+    "motor/__init__.py": "a68d65dd394ecb878f1b7d99c1a31d8aaf6ab989a9c201f0461ff9ae6bb30f8c",
+    "motor/bomba_ramificada.py": "0673af037f158b6084ec7010ad923e6453cc6a3f60d0028904ba16dc85449b33",
+    "motor/bombas.py": "0b95a3fdc86d85b2fab058cefb19983192bedcee7759d323fbe9eef3d2f2ff42",
+    "motor/ejecucion.py": "2f2d45fdb0b86069514bc7ea529acb7d3b035ede014ebb106f18953b45ed8554",
+    "motor/friccion.py": "c927ce01d863436d1b5ba12c5f220b86a96e9b69daad1bc98d984cfa6af1518f",
+    "motor/motor_fluidos.py": "33cac9764223aa32f3c8dc4a9ae219f2aafd1741b3c4cde04f0db9ddecfef582",
+    "motor/numerica.py": "b5c7231775f69e9115da9f8dd9e69fcb0aad34cff0d9880fe53305c7fe415f64",
+    "motor/redes.py": "6b6df94bb149260e825e2f1d62c2babf57cb46d80c5408b336e3c2ebff6e501b",
+    "motor/validacion.py": "6cad00f27ea8b8e2b5fcb0123a55e7d225c03e5d927f8f34e2304218e04c9f02"
+  },
+  "no_disponible": {
+    "perfil_grafico_egl_hgl": "No generado: ResolucionMixin._construir_serie_ruta_egl y _construir_puntos_tramo_egl requieren elementos y posiciones de PyQt. Las alturas nodales del motor se conservan por separado.",
+    "presion_nodos_internos": "El motor no entrega un campo general de presiones nodales; Hj y EGL no se convierten en presión sin cota, velocidad y referencia explícitas."
+  },
+  "entrada": {
+    "arreglo": "paralelo",
+    "curvas": [
+      {
+        "nombre": "NPSHr",
+        "Q": [
+          0.0,
+          0.02,
+          0.04
+        ],
+        "H": [
+          40.0,
+          20.0,
+          0.0
+        ],
+        "eta": [
+          0.8,
+          0.8,
+          0.8
+        ],
+        "npsh_r": [
+          2.0,
+          2.5,
+          3.0
+        ],
+        "metodo": "lineal",
+        "coef_a": 39.99999999999998,
+        "coef_b": -1000.000000000001,
+        "coef_c": 3.149154364038067e-11,
+        "Q_min": 0.0,
+        "Q_max": 0.04,
+        "estado": "OK"
+      },
+      {
+        "nombre": "NPSHr",
+        "Q": [
+          0.0,
+          0.02,
+          0.04
+        ],
+        "H": [
+          40.0,
+          20.0,
+          0.0
+        ],
+        "eta": [
+          0.8,
+          0.8,
+          0.8
+        ],
+        "npsh_r": [
+          2.0,
+          2.5,
+          3.0
+        ],
+        "metodo": "lineal",
+        "coef_a": 39.99999999999998,
+        "coef_b": -1000.000000000001,
+        "coef_c": 3.149154364038067e-11,
+        "Q_min": 0.0,
+        "Q_max": 0.04,
+        "estado": "OK"
+      }
+    ],
+    "tramos": [
+      {
+        "tuberia": "Aspiracion",
+        "L": 10.0,
+        "D": 0.15,
+        "eps": 0.0,
+        "K": 1.0,
+        "LeD": 0.0
+      },
+      {
+        "tuberia": "Impulsion",
+        "L": 100.0,
+        "D": 0.1,
+        "eps": 1e-05,
+        "K": 2.0,
+        "LeD": 15.0
+      }
+    ],
+    "z_inicio": 0.0,
+    "z_fin": 10.0,
+    "npsh": {
+      "P_atm": 101325.0,
+      "P_vap": 2339.0,
+      "rho": 1000.0,
+      "g": 9.81,
+      "z1": 0.0,
+      "z_bomba": 0.0,
+      "P1": 0.0,
+      "hf_succion": 0.3203320836488787
+    },
+    "perdidas_entre_etapas": []
+  },
+  "solver": "motor.bombas.punto_operacion + EstacionBombeo.evaluar_npsh",
+  "resultado": {
+    "estado": "OK",
+    "mensaje": "Punto de operación encontrado con éxito.",
+    "Q": 0.03128943786025047,
+    "H_total": 24.355281069874763,
+    "P_hidraulica": 7475.8385558629025,
+    "BHP_total": 9344.798194828627,
+    "eta_global": 0.8,
+    "desglose": [
+      {
+        "id": "NPSHr",
+        "etapa": 1,
+        "Q_i": 0.015644718930125236,
+        "H_i": 24.355281069874763,
+        "eta_i": 0.8,
+        "BHP_i": 4672.3990974143135,
+        "activa": true,
+        "P_hidraulica": 3737.9192779314512,
+        "npsh_d": 9.769983920428594,
+        "npsh_r": 2.391117973253131,
+        "cavitacion": "SIN RIESGO"
+      },
+      {
+        "id": "NPSHr",
+        "etapa": 1,
+        "Q_i": 0.015644718930125236,
+        "H_i": 24.355281069874763,
+        "eta_i": 0.8,
+        "BHP_i": 4672.3990974143135,
+        "activa": true,
+        "P_hidraulica": 3737.9192779314512,
+        "npsh_d": 9.769983920428594,
+        "npsh_r": 2.391117973253131,
+        "cavitacion": "SIN RIESGO"
+      }
+    ],
+    "direccion": "Aspiración → descarga",
+    "historial_iteraciones": []
+  },
+  "curva_sistema": [
+    [
+      0.0,
+      10.0
+    ],
+    [
+      0.004,
+      10.322210359595251
+    ],
+    [
+      0.008,
+      11.138377942757796
+    ],
+    [
+      0.012,
+      12.400420741965085
+    ],
+    [
+      0.016,
+      14.090476806875877
+    ],
+    [
+      0.02,
+      16.198580799999384
+    ],
+    [
+      0.024,
+      18.718348835401706
+    ],
+    [
+      0.028000000000000004,
+      21.64536244894004
+    ],
+    [
+      0.032,
+      24.97640427646968
+    ],
+    [
+      0.036,
+      28.709044685819705
+    ],
+    [
+      0.04,
+      32.841397414980776
+    ],
+    [
+      0.044,
+      37.37196558080825
+    ],
+    [
+      0.048,
+      42.29953982178478
+    ],
+    [
+      0.052000000000000005,
+      47.623128308204954
+    ],
+    [
+      0.05600000000000001,
+      53.34190714277501
+    ],
+    [
+      0.06,
+      59.45518430135269
+    ],
+    [
+      0.064,
+      65.96237284606205
+    ],
+    [
+      0.068,
+      72.86297065540349
+    ],
+    [
+      0.072,
+      80.1565448378978
+    ],
+    [
+      0.076,
+      87.84271957727886
+    ],
+    [
+      0.08,
+      95.92116653484528
+    ]
+  ],
+  "ecuacion_total_aproximada": {
+    "a": 40.000000000000014,
+    "b": -500.00000000000006,
+    "c": -2.8532923700945395e-11,
+    "tipo": "ajuste",
+    "R2": 1.0,
+    "texto": "H(Q) = 40.00 − 500·Q − 0.00·Q²",
+    "delta_Qop": -1.4210854715202004e-14,
+    "error_max": 2.842170943040401e-14
+  },
+  "tramos": [
+    {
+      "id": "Aspiracion",
+      "Q": 0.03128943786025047,
+      "area": 0.017671458676442587,
+      "v": 1.770619982942421,
+      "Re": 265592.9974413631,
+      "f": {
+        "valor": 0.015070453523506803,
+        "metadatos": {
+          "iteraciones": 15,
+          "historial_iteraciones": [
+            {
+              "propuesto": 1.0,
+              "obtenido": 9.949716,
+              "f_final": 0.01010133
+            },
+            {
+              "propuesto": 9.949716,
+              "obtenido": 7.973828,
+              "f_final": 0.01572774
+            },
+            {
+              "propuesto": 7.973828,
+              "obtenido": 8.164215,
+              "f_final": 0.01500276
+            },
+            {
+              "propuesto": 8.164215,
+              "obtenido": 8.143922,
+              "f_final": 0.01507762
+            },
+            {
+              "propuesto": 8.143922,
+              "obtenido": 8.146062,
+              "f_final": 0.0150697
+            },
+            {
+              "propuesto": 8.146062,
+              "obtenido": 8.145836,
+              "f_final": 0.01507053
+            },
+            {
+              "propuesto": 8.145836,
+              "obtenido": 8.14586,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.14586,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            }
+          ],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 4.797511829514989e-15,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      },
+      "ley_motor": "colebrook",
+      "regimen_ui": "Turbulento",
+      "hf_total": 0.3203320836488787,
+      "hf_distribuida": 0.16054130260937727,
+      "hf_localizada": 0.15979078103950145,
+      "resultado_perdida": {
+        "valores": [
+          0.3203320836488787,
+          0.16054130260937727,
+          0.15979078103950145
+        ],
+        "metadatos": {
+          "iteraciones": 15,
+          "historial_iteraciones": [
+            {
+              "propuesto": 1.0,
+              "obtenido": 9.949716,
+              "f_final": 0.01010133
+            },
+            {
+              "propuesto": 9.949716,
+              "obtenido": 7.973828,
+              "f_final": 0.01572774
+            },
+            {
+              "propuesto": 7.973828,
+              "obtenido": 8.164215,
+              "f_final": 0.01500276
+            },
+            {
+              "propuesto": 8.164215,
+              "obtenido": 8.143922,
+              "f_final": 0.01507762
+            },
+            {
+              "propuesto": 8.143922,
+              "obtenido": 8.146062,
+              "f_final": 0.0150697
+            },
+            {
+              "propuesto": 8.146062,
+              "obtenido": 8.145836,
+              "f_final": 0.01507053
+            },
+            {
+              "propuesto": 8.145836,
+              "obtenido": 8.14586,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.14586,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            },
+            {
+              "propuesto": 8.145858,
+              "obtenido": 8.145858,
+              "f_final": 0.01507045
+            }
+          ],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 4.797511829514989e-15,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      }
+    },
+    {
+      "id": "Impulsion",
+      "Q": 0.03128943786025047,
+      "area": 0.007853981633974483,
+      "v": 3.983894961620447,
+      "Re": 398389.4961620447,
+      "f": {
+        "valor": 0.015122940351209764,
+        "metadatos": {
+          "iteraciones": 13,
+          "historial_iteraciones": [
+            {
+              "propuesto": 1.0,
+              "obtenido": 8.865853,
+              "f_final": 0.01272211
+            },
+            {
+              "propuesto": 8.865853,
+              "obtenido": 8.082327,
+              "f_final": 0.01530831
+            },
+            {
+              "propuesto": 8.082327,
+              "obtenido": 8.135136,
+              "f_final": 0.01511021
+            },
+            {
+              "propuesto": 8.135136,
+              "obtenido": 8.131473,
+              "f_final": 0.01512382
+            },
+            {
+              "propuesto": 8.131473,
+              "obtenido": 8.131726,
+              "f_final": 0.01512288
+            },
+            {
+              "propuesto": 8.131726,
+              "obtenido": 8.131709,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.131709,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.13171,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.13171,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.13171,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.13171,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.13171,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.13171,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            }
+          ],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 1.0922406518280988e-15,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      },
+      "ley_motor": "colebrook",
+      "regimen_ui": "Turbulento",
+      "hf_total": 14.034949021411014,
+      "hf_distribuida": 12.233563904813854,
+      "hf_localizada": 1.8013851165971602,
+      "resultado_perdida": {
+        "valores": [
+          14.034949021411014,
+          12.233563904813854,
+          1.8013851165971602
+        ],
+        "metadatos": {
+          "iteraciones": 13,
+          "historial_iteraciones": [
+            {
+              "propuesto": 1.0,
+              "obtenido": 8.865853,
+              "f_final": 0.01272211
+            },
+            {
+              "propuesto": 8.865853,
+              "obtenido": 8.082327,
+              "f_final": 0.01530831
+            },
+            {
+              "propuesto": 8.082327,
+              "obtenido": 8.135136,
+              "f_final": 0.01511021
+            },
+            {
+              "propuesto": 8.135136,
+              "obtenido": 8.131473,
+              "f_final": 0.01512382
+            },
+            {
+              "propuesto": 8.131473,
+              "obtenido": 8.131726,
+              "f_final": 0.01512288
+            },
+            {
+              "propuesto": 8.131726,
+              "obtenido": 8.131709,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.131709,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.13171,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.13171,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.13171,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.13171,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.13171,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            },
+            {
+              "propuesto": 8.13171,
+              "obtenido": 8.13171,
+              "f_final": 0.01512294
+            }
+          ],
+          "residuo_masa": 0.0,
+          "residuo_energia": 0.0,
+          "residuo_masa_relativo": 0.0,
+          "residuo_energia_relativo": 0.0,
+          "residuo_ecuacion": 1.0922406518280988e-15,
+          "estado": "OK",
+          "mensaje": "Balances verificados."
+        }
+      }
+    }
+  ],
+  "balances": {
+    "residuo_energia": -3.51851312530016e-08,
+    "residuo_masa_por_etapa": [
+      0.0
+    ]
+  }
+}
