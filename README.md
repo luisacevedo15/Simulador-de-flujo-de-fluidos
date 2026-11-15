@@ -33,7 +33,9 @@ Proyecto dividido en módulos por responsabilidad para diseño y análisis hidr�
 ## Descarga rápida (si no usas Git)
 
 - **Opción recomendada (Windows, sin instalar Python):** haz clic en **Descargar para Windows (.exe)** arriba para descargar directamente `Simulador.Flujo.de.Fluidos.exe` (también disponible en [Releases](https://github.com/luisacevedo15/Simulador-de-fluidos/releases/latest)) y ejecútalo.
-  > **Nota sobre Windows Defender / SmartScreen:** como es un ejecutable compilado con PyInstaller sin certificado comercial de firma digital, Windows puede mostrar el aviso preventivo *"Windows protegió su PC"*. Si aparece, haz clic en **Más información → Ejecutar de todas formas** (o usa la opción de código fuente con Python si prefieres inspeccionar y ejecutar el código directamente).
+  > **Nota sobre avisos de Windows:** como es un ejecutable compilado con PyInstaller sin firma digital comercial, Windows puede mostrar uno o ambos avisos preventivos la primera vez:
+  > - Si aparece *"Editor desconocido"* (*Advertencia de seguridad de Abrir archivo*), desmarca **"Preguntar siempre antes de abrir este archivo"** y pulsa **Ejecutar**.
+  > - Si aparece la ventana azul *"Windows protegió su PC"*, haz clic en **Más información → Ejecutar de todas formas** (o usa la opción de código fuente con Python si prefieres inspeccionar y ejecutar el código directamente).
 - **Opción con código fuente:** haz clic en **Descargar Código (.zip)** arriba, descomprime la carpeta en tu equipo y sigue la sección [Ejecutar](#ejecutar).
 
 ## Estructura
