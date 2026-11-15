@@ -3,7 +3,7 @@
 Proyecto dividido en módulos por responsabilidad para diseño y análisis hidráulico de redes de tuberías y sistemas de bombeo en entorno CAD.
 
 <p align="center">
-  <a href="https://github.com/luisacevedo15/Simulador-de-fluidos/releases/latest">
+  <a href="https://github.com/luisacevedo15/Simulador-de-fluidos/releases/latest/download/Simulador.Flujo.de.Fluidos.exe">
     <img src="presentacion/btn_descargar_windows.png" alt="Descargar para Windows (.exe)" width="255">
   </a>
   &nbsp;
@@ -32,7 +32,8 @@ Proyecto dividido en módulos por responsabilidad para diseño y análisis hidr�
 
 ## Descarga rápida (si no usas Git)
 
-- **Opción recomendada (Windows, sin instalar Python):** haz clic en **Descargar para Windows (.exe)** arriba (se abrirá la página de *Releases*), descarga `Simulador_Flujo_de_Fluidos.exe` en la sección **Assets** y ejecútalo directamente.
+- **Opción recomendada (Windows, sin instalar Python):** haz clic en **Descargar para Windows (.exe)** arriba para descargar directamente `Simulador.Flujo.de.Fluidos.exe` (también disponible en [Releases](https://github.com/luisacevedo15/Simulador-de-fluidos/releases/latest)) y ejecútalo.
+  > **Nota sobre Windows Defender / SmartScreen:** como es un ejecutable compilado con PyInstaller sin certificado comercial de firma digital, Windows puede mostrar el aviso preventivo *"Windows protegió su PC"*. Si aparece, haz clic en **Más información → Ejecutar de todas formas** (o usa la opción de código fuente con Python si prefieres inspeccionar y ejecutar el código directamente).
 - **Opción con código fuente:** haz clic en **Descargar Código (.zip)** arriba, descomprime la carpeta en tu equipo y sigue la sección [Ejecutar](#ejecutar).
 
 ## Estructura
