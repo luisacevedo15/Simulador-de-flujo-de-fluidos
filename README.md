@@ -1,6 +1,39 @@
 # Simulador de flujo de fluidos
 
-Proyecto dividido en módulos por responsabilidad.
+Proyecto dividido en módulos por responsabilidad para diseño y análisis hidráulico de redes de tuberías y sistemas de bombeo en entorno CAD.
+
+<p align="center">
+  <a href="https://github.com/luisacevedo15/Simulador-de-fluidos/releases/latest">
+    <img src="presentacion/btn_descargar_windows.png" alt="Descargar para Windows (.exe)" width="255">
+  </a>
+  &nbsp;
+  <a href="https://github.com/luisacevedo15/Simulador-de-fluidos/archive/refs/heads/main.zip">
+    <img src="presentacion/btn_descargar_codigo.png" alt="Descargar Código (.zip)" width="255">
+  </a>
+  &nbsp;
+  <a href="https://github.com/luisacevedo15/Simulador-de-fluidos/raw/main/presentacion/Presentacion_720.mp4">
+    <img src="presentacion/btn_ver_video.png" alt="Ver Video de Presentación" width="255">
+  </a>
+</p>
+
+## Presentación del programa
+
+<p align="center">
+  <a href="https://github.com/luisacevedo15/Simulador-de-fluidos/raw/main/presentacion/Presentacion_720.mp4">
+    <img src="presentacion/portada_presentacion.png" alt="Presentación del Simulador de Flujo de Fluidos" width="760">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/luisacevedo15/Simulador-de-fluidos/raw/main/presentacion/Presentacion_720.mp4">▶ Reproducir o descargar video de presentación (720p, 6:22 min)</a>
+  &nbsp;·&nbsp;
+  <a href="presentacion/Presentacion_720.mp4">Ver archivo en el repositorio</a>
+</p>
+
+## Descarga rápida (si no usas Git)
+
+- **Opción recomendada (Windows, sin instalar Python):** haz clic en **Descargar para Windows (.exe)** arriba (se abrirá la página de *Releases*), descarga `Simulador_Flujo_de_Fluidos.exe` en la sección **Assets** y ejecútalo directamente.
+- **Opción con código fuente:** haz clic en **Descargar Código (.zip)** arriba, descomprime la carpeta en tu equipo y sigue la sección [Ejecutar](#ejecutar).
 
 ## Estructura
 
@@ -10,6 +43,10 @@ Simulador-de-fluidos/
 ├── build_exe.py                         Compilación de ejecutable con PyInstaller
 ├── Simulador_Flujo_de_Fluidos.spec      Especificación de empaquetado PyInstaller
 ├── requirements.txt                     Dependencias del proyecto
+├── presentacion/                        Video de presentación y recursos gráficos del README
+│   ├── Presentacion_720.mp4             Video de presentación (720p, optimizado para GitHub)
+│   ├── portada_presentacion.png         Miniatura del video con botón de reproducción
+│   └── btn_*.png                        Botones de descarga y acceso rápido del README
 ├── motor/                               Cálculo hidráulico en SI (sin interfaz gráfica)
 │   ├── motor_fluidos.py                 Clase MotorFluidos (une fricción, redes, bombas y ramificadas)
 │   ├── friccion.py                      Darcy-Weisbach, Colebrook (-0.86·ln), Kármán, cálculo de Q y D
