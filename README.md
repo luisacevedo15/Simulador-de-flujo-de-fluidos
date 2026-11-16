@@ -4,7 +4,7 @@ Proyecto dividido en módulos por responsabilidad para diseño y análisis hidr�
 
 <p align="center">
   <a href="https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos/releases/latest/download/Simulador_Flujo_de_Fluidos_Setup.exe">
-    <img src="presentacion/btn_descargar_windows.png" alt="Descargar para Windows (.exe)" width="255">
+    <img src="presentacion/btn_descargar_windows.png" alt="Descargar Instalador (Windows)" width="255">
   </a>
   &nbsp;
   <a href="https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos/archive/refs/heads/main.zip">
