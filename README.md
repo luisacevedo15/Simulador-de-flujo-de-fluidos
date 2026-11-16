@@ -32,8 +32,8 @@ Proyecto dividido en módulos por responsabilidad para diseño y análisis hidr�
 
 ## Descarga rápida (si no usas Git)
 
-- **Opción recomendada (Windows, sin instalar Python):** haz clic en **Descargar para Windows (.exe)** arriba para descargar el instalador `Simulador_Flujo_de_Fluidos_Setup.exe` (también disponible en [Releases](https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos/releases/latest)) y ejecútalo. El programa incluye verificación integrada de actualizaciones desde GitHub Releases.
-  > **Firma digital y avisos de Windows:** Free code signing provided by [SignPath.io](https://signpath.io/), using a certificate by [SignPath Foundation](https://signpath.org/) (en proceso de integración para compilaciones oficiales en GitHub Actions). Si en versiones previas o compilaciones sin firma aparece *"Editor desconocido"* o *"Windows protegió su PC"*, haz clic en **Más información → Ejecutar de todas formas**, o ejecuta directamente desde el código fuente con Python.
+- **Opción recomendada (Windows, sin instalar Python):** haz clic en **Descargar Instalador (Windows)** arriba para descargar `Simulador_Flujo_de_Fluidos_Setup.exe` (también disponible en [Releases](https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos/releases/latest)) y ejecútalo. El programa incluye verificación integrada de actualizaciones desde GitHub Releases.
+  > **Aviso inicial de Windows SmartScreen:** como el instalador de GitHub todavía no cuenta con firma digital comercial, Windows puede mostrar *"Windows protegió su PC"* (*Editor desconocido*) la primera vez. Puedes hacer clic en **Más información → Ejecutar de todas formas** (el binario fue compilado directamente desde este código público mediante GitHub Actions y verificado limpio en Microsoft Security Intelligence) o ejecutar el programa desde el código fuente con Python.
 - **Opción con código fuente:** haz clic en **Descargar Código (.zip)** arriba, descomprime la carpeta en tu equipo y sigue la sección [Ejecutar](#ejecutar).
 
 ## Estructura
@@ -42,6 +42,7 @@ Proyecto dividido en módulos por responsabilidad para diseño y análisis hidr�
 Simulador-de-flujo-de-fluidos/
 ├── main.py                              Punto de entrada (ejecutar este archivo)
 ├── build_exe.py                         Compilación con PyInstaller (--onedir por defecto)
+├── build_msix.py                        Empaquetado MSIX para Microsoft Store
 ├── Simulador_Flujo_de_Fluidos.spec      Especificación de empaquetado PyInstaller
 ├── instalador.iss                       Script de Inno Setup 6 para generar el instalador
 ├── LICENSE                              Licencia Open Source (MIT)
