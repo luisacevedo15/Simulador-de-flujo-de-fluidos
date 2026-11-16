@@ -60,7 +60,7 @@ def test_cabecera_sin_titulo_duplicado_y_con_version(ventana):
 
     info = InfoActualizacion(
         version_remota="9.9.9",
-        url_release="https://github.com/luisacevedo15/Simulador-de-fluidos/releases/tag/v9.9.9",
+        url_release="https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos/releases/tag/v9.9.9",
         notas="Mejoras de prueba",
         nombre_asset="Simulador_Flujo_de_Fluidos_Setup.exe",
         url_descarga="https://example.com/Setup.exe",
@@ -109,7 +109,7 @@ def test_consultar_ultima_version_mock():
     payload = json.dumps(
         {
             "tag_name": "v2.0.0",
-            "html_url": "https://github.com/luisacevedo15/Simulador-de-fluidos/releases/tag/v2.0.0",
+            "html_url": "https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos/releases/tag/v2.0.0",
             "body": "Notas de versión",
             "assets": [
                 {

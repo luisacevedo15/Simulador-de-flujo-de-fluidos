@@ -7,7 +7,7 @@
 
 #define MyAppName "Simulador de Flujo de Fluidos"
 #define MyAppPublisher "Luis Acevedo Suarez"
-#define MyAppURL "https://github.com/luisacevedo15/Simulador-de-fluidos"
+#define MyAppURL "https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos"
 #define MyAppExeName "Simulador_Flujo_de_Fluidos.exe"
 #define MyAppAssocExt ".sff"
 #define MyAppAssocProgId "SimuladorFlujoFluidos.Proyecto"

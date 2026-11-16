@@ -3,15 +3,15 @@
 Proyecto dividido en módulos por responsabilidad para diseño y análisis hidráulico de redes de tuberías y sistemas de bombeo en entorno CAD.
 
 <p align="center">
-  <a href="https://github.com/luisacevedo15/Simulador-de-fluidos/releases/latest/download/Simulador.Flujo.de.Fluidos.exe">
+  <a href="https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos/releases/latest/download/Simulador_Flujo_de_Fluidos_Setup.exe">
     <img src="presentacion/btn_descargar_windows.png" alt="Descargar para Windows (.exe)" width="255">
   </a>
   &nbsp;
-  <a href="https://github.com/luisacevedo15/Simulador-de-fluidos/archive/refs/heads/main.zip">
+  <a href="https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos/archive/refs/heads/main.zip">
     <img src="presentacion/btn_descargar_codigo.png" alt="Descargar Código (.zip)" width="255">
   </a>
   &nbsp;
-  <a href="https://github.com/luisacevedo15/Simulador-de-fluidos/raw/main/presentacion/Presentacion_720.mp4">
+  <a href="https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos/raw/main/presentacion/Presentacion_720.mp4">
     <img src="presentacion/btn_ver_video.png" alt="Ver Video de Presentación" width="255">
   </a>
 </p>
@@ -19,29 +19,27 @@ Proyecto dividido en módulos por responsabilidad para diseño y análisis hidr�
 ## Presentación del programa
 
 <p align="center">
-  <a href="https://github.com/luisacevedo15/Simulador-de-fluidos/raw/main/presentacion/Presentacion_720.mp4">
+  <a href="https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos/raw/main/presentacion/Presentacion_720.mp4">
     <img src="presentacion/portada_presentacion.png" alt="Presentación del Simulador de Flujo de Fluidos" width="760">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/luisacevedo15/Simulador-de-fluidos/raw/main/presentacion/Presentacion_720.mp4">▶ Reproducir o descargar video de presentación (720p, 6:22 min)</a>
+  <a href="https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos/raw/main/presentacion/Presentacion_720.mp4">▶ Reproducir o descargar video de presentación (720p, 6:22 min)</a>
   &nbsp;·&nbsp;
   <a href="presentacion/Presentacion_720.mp4">Ver archivo en el repositorio</a>
 </p>
 
 ## Descarga rápida (si no usas Git)
 
-- **Opción recomendada (Windows, sin instalar Python):** haz clic en **Descargar para Windows (.exe)** arriba para descargar directamente `Simulador.Flujo.de.Fluidos.exe` (también disponible en [Releases](https://github.com/luisacevedo15/Simulador-de-fluidos/releases/latest)) y ejecútalo.
-  > **Nota sobre avisos de Windows:** como es un ejecutable compilado con PyInstaller sin firma digital comercial, Windows puede mostrar uno o ambos avisos preventivos la primera vez:
-  > - Si aparece *"Editor desconocido"* (*Advertencia de seguridad de Abrir archivo*), desmarca **"Preguntar siempre antes de abrir este archivo"** y pulsa **Ejecutar**.
-  > - Si aparece la ventana azul *"Windows protegió su PC"*, haz clic en **Más información → Ejecutar de todas formas** (o usa la opción de código fuente con Python si prefieres inspeccionar y ejecutar el código directamente).
+- **Opción recomendada (Windows, sin instalar Python):** haz clic en **Descargar para Windows (.exe)** arriba para descargar el instalador `Simulador_Flujo_de_Fluidos_Setup.exe` (también disponible en [Releases](https://github.com/luisacevedo15/Simulador-de-flujo-de-fluidos/releases/latest)) y ejecútalo. El programa incluye verificación integrada de actualizaciones desde GitHub Releases.
+  > **Firma digital y avisos de Windows:** Free code signing provided by [SignPath.io](https://signpath.io/), using a certificate by [SignPath Foundation](https://signpath.org/) (en proceso de integración para compilaciones oficiales en GitHub Actions). Si en versiones previas o compilaciones sin firma aparece *"Editor desconocido"* o *"Windows protegió su PC"*, haz clic en **Más información → Ejecutar de todas formas**, o ejecuta directamente desde el código fuente con Python.
 - **Opción con código fuente:** haz clic en **Descargar Código (.zip)** arriba, descomprime la carpeta en tu equipo y sigue la sección [Ejecutar](#ejecutar).
 
 ## Estructura
 
 ```text
-Simulador-de-fluidos/
+Simulador-de-flujo-de-fluidos/
 ├── main.py                              Punto de entrada (ejecutar este archivo)
 ├── build_exe.py                         Compilación con PyInstaller (--onedir por defecto)
 ├── Simulador_Flujo_de_Fluidos.spec      Especificación de empaquetado PyInstaller
@@ -95,7 +93,7 @@ Simulador-de-fluidos/
 
 ## Ejecutar
 
-Desde la raíz del proyecto (`Simulador-de-fluidos/`):
+Desde la raíz del proyecto (`Simulador-de-flujo-de-fluidos/`):
 
 ```bash
 python -m pip install -r requirements.txt
