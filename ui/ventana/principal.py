@@ -1,11 +1,15 @@
 """Ventana principal: arma la interfaz y une todos los módulos de la ventana."""
 
+import os
+
 from PyQt5 import QtGui
-from PyQt5.QtWidgets import QMainWindow
+from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QApplication, QMainWindow
 
 from ui.constantes import ARCHIVO_ICONO
 from ui.animaciones import MicroAnimaciones
 from ui.asociacion_archivos import registrar_asociacion_proyecto
+from ui.ventana.actualizaciones import ActualizacionesMixin
 from ui.ventana.barra_herramientas import BarraHerramientasMixin, normalizar_datos_fluido
 from ui.ventana.bernoulli import BernoulliMixin
 from ui.ventana.bombas import BombasMixin
@@ -21,7 +25,7 @@ from ui.ventana.vistas import VistasMixin
 from ui.recursos import ruta_recurso
 
 
-class MainWindow(QMainWindow, InterfazMixin, EstilosMixin, VistasMixin, BarraHerramientasMixin, PanelPropiedadesMixin, DashboardMixin, ResolucionMixin, RamificadasMixin, ExportacionMixin, MemoriaCalculoMixin, BernoulliMixin, BombasMixin):
+class MainWindow(QMainWindow, ActualizacionesMixin, InterfazMixin, EstilosMixin, VistasMixin, BarraHerramientasMixin, PanelPropiedadesMixin, DashboardMixin, ResolucionMixin, RamificadasMixin, ExportacionMixin, MemoriaCalculoMixin, BernoulliMixin, BombasMixin):
     UNIDADES_Q = ["m³/s", "L/s", "gal/min"]
     UNIDADES_L = ["m", "cm", "mm", "in"]
     UNIDADES_D = ["m", "cm", "mm", "in"]
@@ -33,8 +37,14 @@ class MainWindow(QMainWindow, InterfazMixin, EstilosMixin, VistasMixin, BarraHer
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Simulador de Fluidos  /  Ingeniería Química CAD")
-        self.setWindowIcon(QtGui.QIcon(ruta_recurso(ARCHIVO_ICONO)))
+        icono = QtGui.QIcon(ruta_recurso(ARCHIVO_ICONO))
+        if not icono.isNull():
+            self.setWindowIcon(icono)
+            app = QApplication.instance()
+            if app is not None and app.windowIcon().isNull():
+                app.setWindowIcon(icono)
         registrar_asociacion_proyecto()
+        self._inicializar_actualizaciones()
         self.resize(1280, 800)
         self.setMinimumSize(960, 640)
 
@@ -80,3 +90,12 @@ class MainWindow(QMainWindow, InterfazMixin, EstilosMixin, VistasMixin, BarraHer
         self._micro_animaciones = MicroAnimaciones(self)
         from ui.ventana.historial import HistorialProyecto
         self.historial = HistorialProyecto(self)
+        if not (
+            os.environ.get("PYTEST_CURRENT_TEST")
+            or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
+        ):
+            QTimer.singleShot(2500, self._iniciar_verificacion_actualizaciones_silenciosa)
+
+    def closeEvent(self, event):
+        self._detener_hilos_actualizacion()
+        super().closeEvent(event)

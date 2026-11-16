@@ -1,0 +1,99 @@
+name: Compilar y Publicar Instalador
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión para compilar (ej. 1.0.1)"
+        required: false
+        default: "1.0.1"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Compilar Instalador Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ejecutar pruebas unitarias
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+
+      - name: Determinar versión
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $ver = "${{ github.ref_name }}".TrimStart("v")
+          } else {
+            $ver = "${{ github.event.inputs.version }}"
+            if ([string]::IsNullOrWhiteSpace($ver)) { $ver = "1.0.1" }
+          }
+          echo "app_version=$ver" >> $env:GITHUB_OUTPUT
+
+      - name: Compilar aplicación con PyInstaller (--onedir)
+        run: python build_exe.py
+
+      # ------------------------------------------------------------------
+      # FIRMA DIGITAL GRATUITA PARA OPEN SOURCE (SignPath.io)
+      # Una vez aprobada tu solicitud en https://signpath.org/open-source:
+      # 1. Agrega SIGNPATH_API_TOKEN y SIGNPATH_ORG_ID en Settings > Secrets.
+      # 2. Firma primero dist/Simulador_Flujo_de_Fluidos/Simulador_Flujo_de_Fluidos.exe
+      #    y después dist/installer/Simulador_Flujo_de_Fluidos_Setup.exe usando
+      #    signpath/github-action-submit-signing-request@v1.
+      # ------------------------------------------------------------------
+
+      - name: Generar instalador con Inno Setup
+        shell: pwsh
+        run: |
+          $candidatos = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+            "${env:LOCALAPPDATA}\Programs\Inno Setup 6\ISCC.exe"
+          )
+          $iscc = $candidatos | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            winget install --id JRSoftware.InnoSetup -e --silent --accept-package-agreements --accept-source-agreements
+            $iscc = $candidatos | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) {
+            choco install innosetup -y
+            $iscc = $candidatos | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) {
+            throw "No se pudo instalar o encontrar Inno Setup 6 (ISCC.exe)"
+          }
+          & $iscc "/DMyAppVersion=${{ steps.version.outputs.app_version }}" instalador.iss
+
+      - name: Subir artefacto del instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: Simulador_Flujo_de_Fluidos_Setup
+          path: dist/installer/Simulador_Flujo_de_Fluidos_Setup.exe
+
+      - name: Publicar Release en GitHub
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/installer/Simulador_Flujo_de_Fluidos_Setup.exe
+          generate_release_notes: true

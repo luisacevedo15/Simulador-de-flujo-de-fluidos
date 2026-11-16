@@ -17,31 +17,36 @@ class EstilosMixin:
                 background-color: #ffffff;
                 border-bottom: 1px solid #e2e8f0;
             }
-            QLabel#stitchHeaderTitle {
+            QLabel#stitchVersionBadge {
                 font-family: "Inter", "Segoe UI", sans-serif;
-                font-size: 15px;
+                font-size: 12px;
                 font-weight: 600;
                 color: #0c4e77;
-                letter-spacing: -0.2px;
-                background: transparent;
+                background-color: #eff4ff;
+                border: 1px solid #cbd5e1;
+                border-radius: 14px;
+                padding: 0px 12px;
             }
-            QLabel#stitchHeaderSlash {
+            QPushButton#stitchUpdateBtn {
                 font-family: "Inter", "Segoe UI", sans-serif;
-                font-size: 15px;
-                font-weight: 300;
-                color: #c1c7cf;
-                background: transparent;
+                font-size: 12px;
+                font-weight: 500;
+                color: #475569;
+                background-color: #ffffff;
+                border: 1px solid #d4e2ef;
+                border-radius: 14px;
+                padding: 0px 12px;
             }
-            QLabel#stitchHeaderSub {
-                font-family: "Inter", "Segoe UI", sans-serif;
-                font-size: 13px;
-                font-weight: 400;
-                color: #72787f;
-                background: transparent;
+            QPushButton#stitchUpdateBtn:hover {
+                background-color: #e7f5ff;
+                border-color: #7fc6ed;
+                color: #075985;
             }
-            QFrame#stitchHeaderSep {
-                background-color: #dce4ee;
-                border: none;
+            QPushButton#stitchUpdateBtn[updateAvailable="true"] {
+                background-color: #dbeafe;
+                border-color: #60a5fa;
+                color: #0c4e77;
+                font-weight: 600;
             }
 
             /* Herramientas en cápsulas: aire para la elevación de 3 px. */

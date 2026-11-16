@@ -43,8 +43,11 @@ Proyecto dividido en módulos por responsabilidad para diseño y análisis hidr�
 ```text
 Simulador-de-fluidos/
 ├── main.py                              Punto de entrada (ejecutar este archivo)
-├── build_exe.py                         Compilación de ejecutable con PyInstaller
+├── build_exe.py                         Compilación con PyInstaller (--onedir por defecto)
 ├── Simulador_Flujo_de_Fluidos.spec      Especificación de empaquetado PyInstaller
+├── instalador.iss                       Script de Inno Setup 6 para generar el instalador
+├── LICENSE                              Licencia Open Source (MIT)
+├── .github/workflows/release.yml        Flujo de compilación y publicación en GitHub Releases
 ├── requirements.txt                     Dependencias del proyecto
 ├── presentacion/                        Video de presentación y recursos gráficos del README
 │   ├── Presentacion_720.mp4             Video de presentación (720p, optimizado para GitHub)

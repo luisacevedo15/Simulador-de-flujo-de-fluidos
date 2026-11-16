@@ -25,7 +25,7 @@ from PyQt5.QtWidgets import (
 )
 
 from ui.escena import CanvasView, GridScene
-from ui.constantes import TEMA_STITCH
+from ui.constantes import TEMA_STITCH, VERSION_APP
 from ui.perfil_egl import WidgetPerfilEGLHGL
 from ui.grafico_bombas import (
     WidgetGraficoBombas,
@@ -50,34 +50,23 @@ class InterfazMixin:
         h_layout.setContentsMargins(14, 0, 14, 0)
         h_layout.setSpacing(8)
 
-        lbl_ico = QLabel()
-        lbl_ico.setPixmap(
-            crear_icono_herramienta("simulador_header", TEMA_STITCH["primary"]).pixmap(20, 20)
-        )
-        lbl_ico.setFixedSize(22, 22)
-        lbl_ico.setAlignment(Qt.AlignCenter)
-        h_layout.addWidget(lbl_ico)
+        self.lbl_version = QLabel(f"Versión {VERSION_APP}")
+        self.lbl_version.setObjectName("stitchVersionBadge")
+        self.lbl_version.setFixedHeight(28)
+        self.lbl_version.setAlignment(Qt.AlignCenter)
+        self.lbl_version.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.lbl_version.setToolTip(f"Simulador de Flujo de Fluidos v{VERSION_APP}")
+        h_layout.addWidget(self.lbl_version, 0, Qt.AlignVCenter)
 
-        lbl_title = QLabel("Simulador de Fluidos")
-        lbl_title.setObjectName("stitchHeaderTitle")
-        lbl_title.setWordWrap(False)
-        h_layout.addWidget(lbl_title)
+        self.btn_buscar_actualizacion = QPushButton("Buscar actualizaciones")
+        self.btn_buscar_actualizacion.setObjectName("stitchUpdateBtn")
+        self.btn_buscar_actualizacion.setFixedHeight(28)
+        self.btn_buscar_actualizacion.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.btn_buscar_actualizacion.setCursor(Qt.PointingHandCursor)
+        self.btn_buscar_actualizacion.setToolTip("Comprobar si hay una nueva versión en GitHub")
+        self.btn_buscar_actualizacion.clicked.connect(self._on_buscar_actualizaciones_clicked)
+        h_layout.addWidget(self.btn_buscar_actualizacion, 0, Qt.AlignVCenter)
 
-        lbl_slash = QLabel("/")
-        lbl_slash.setObjectName("stitchHeaderSlash")
-        lbl_slash.setWordWrap(False)
-        h_layout.addWidget(lbl_slash)
-
-        lbl_sub = QLabel("Ingeniería Química CAD")
-        lbl_sub.setObjectName("stitchHeaderSub")
-        lbl_sub.setWordWrap(False)
-        h_layout.addWidget(lbl_sub)
-
-        sep_v = QFrame()
-        sep_v.setObjectName("stitchHeaderSep")
-        sep_v.setFixedSize(1, 14)
-        h_layout.addSpacing(4)
-        h_layout.addWidget(sep_v)
         h_layout.addStretch()
 
         # Selector global de trazado en la parte superior (arriba de Guardar y Cargar)

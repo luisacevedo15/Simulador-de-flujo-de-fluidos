@@ -5,12 +5,31 @@ import sys
 import time
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPainter, QPixmap
+from PyQt5.QtGui import QIcon, QPainter, QPixmap
 from PyQt5.QtWidgets import QApplication, QSplashScreen
 
-from ui.constantes import ARCHIVO_LOGO_PROPIO, ARCHIVOS_ESCUDO, EXTENSION_PROYECTO
+from ui.constantes import (
+    APP_USER_MODEL_ID,
+    ARCHIVO_ICONO,
+    ARCHIVO_LOGO_PROPIO,
+    ARCHIVOS_ESCUDO,
+    EXTENSION_PROYECTO,
+    VERSION_APP,
+)
 from ui.recursos import ruta_recurso
 from ui.ventana.principal import MainWindow
+
+
+def configurar_id_aplicacion_windows():
+    """Registra el AppUserModelID en Windows para mostrar logo_1.ico en la barra de tareas."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+    except Exception:
+        pass
 
 
 def _primer_archivo_proyecto(argv):
@@ -32,7 +51,14 @@ def cargar_archivo_desde_argumentos(window, argv):
 
 
 if __name__ == "__main__":
+    configurar_id_aplicacion_windows()
     app = QApplication(sys.argv)
+    app.setApplicationName("Simulador de Flujo de Fluidos")
+    app.setApplicationVersion(VERSION_APP)
+    icono_app = QIcon(ruta_recurso(ARCHIVO_ICONO))
+    if not icono_app.isNull():
+        app.setWindowIcon(icono_app)
+
     archivo_inicial = _primer_archivo_proyecto(sys.argv) is not None
 
     # -------------------------------------------------------------
@@ -62,6 +88,8 @@ if __name__ == "__main__":
             
             if splash is None:
                 splash = QSplashScreen(splash_pixmap, Qt.WindowStaysOnTopHint)
+                if not icono_app.isNull():
+                    splash.setWindowIcon(icono_app)
                 splash.show()
             else:
                 splash.setPixmap(splash_pixmap)
