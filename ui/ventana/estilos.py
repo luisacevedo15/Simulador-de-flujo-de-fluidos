@@ -168,6 +168,35 @@ class EstilosMixin:
                 border-color: #d7e9f6;
                 color: #075985;
             }
+            QToolButton#navBtnReport,
+            QToolButton#navBtnGithub {
+                font-family: "Inter", "Segoe UI", sans-serif;
+                font-size: 9.5px;
+                font-weight: 700;
+                letter-spacing: 0px;
+                border-radius: 14px;
+                padding: 5px 0px 4px 0px;
+            }
+            QToolButton#navBtnReport {
+                background-color: #fff5f5;
+                color: #b42332;
+                border: 1px solid #f4dada;
+            }
+            QToolButton#navBtnReport:hover {
+                background-color: #ffe5e7;
+                border-color: #f0a3ab;
+                color: #991b1b;
+            }
+            QToolButton#navBtnGithub {
+                background-color: #f8fafc;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
+            }
+            QToolButton#navBtnGithub:hover {
+                background-color: #e2e8f0;
+                border-color: #94a3b8;
+                color: #000000;
+            }
 
             /* Lienzo, HUDs flotantes y divisor central */
             QSplitter#mainSplitter::handle,
@@ -185,16 +214,17 @@ class EstilosMixin:
                 margin: 8px 4px 8px 8px;
             }
             QFrame#hudSeleccionFrame {
-                background-color: rgba(255, 255, 255, 0.90);
+                background-color: rgba(255, 255, 255, 0.92);
                 border: 1px solid #d8e2ee;
-                border-radius: 12px;
-                padding: 2px 4px;
+                border-radius: 13px;
+                padding: 0px;
             }
             QLabel#hudSeleccionLabel {
                 font-family: "Inter", "Segoe UI", sans-serif;
-                font-size: 11px;
+                font-size: 11.5px;
                 color: #475569;
                 background: transparent;
+                padding: 1px 2px;
             }
             QFrame#hudZoomFrame {
                 background-color: rgba(255, 255, 255, 0.90);
@@ -210,7 +240,7 @@ class EstilosMixin:
                 font-weight: 600;
                 border: none;
                 border-radius: 4px;
-                padding: 2px 4px;
+                padding: 0px 4px;
             }
             QPushButton#hudZoomBtn:hover {
                 background-color: rgba(226, 232, 240, 0.85);

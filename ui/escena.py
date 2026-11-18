@@ -627,11 +627,14 @@ class CanvasView(QGraphicsView):
         # HUD Flotante Izquierdo: Píldora de Selección
         self.hud_seleccion_frame = QFrame(self)
         self.hud_seleccion_frame.setObjectName("hudSeleccionFrame")
+        self.hud_seleccion_frame.setMinimumHeight(28)
         hud_sel_layout = QHBoxLayout(self.hud_seleccion_frame)
-        hud_sel_layout.setContentsMargins(10, 5, 12, 5)
+        hud_sel_layout.setContentsMargins(12, 5, 12, 5)
         hud_sel_layout.setSpacing(6)
         self.lbl_hud_seleccion = QLabel(self.hud_seleccion_frame)
         self.lbl_hud_seleccion.setObjectName("hudSeleccionLabel")
+        self.lbl_hud_seleccion.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self.lbl_hud_seleccion.setMinimumHeight(18)
         self.lbl_seleccion_hud = self.lbl_hud_seleccion
         hud_sel_layout.addWidget(self.lbl_hud_seleccion)
 
@@ -716,8 +719,17 @@ class CanvasView(QGraphicsView):
         val = texto if texto else "Ninguna"
         self.lbl_hud_seleccion.setText(
             f"<span style='color:#64748b; font-size:11px; font-weight:600;'>Selección:</span>&nbsp;"
-            f"<span style='color:#0c4e77; font-size:11.5px; font-weight:700;'>{val}</span>"
+            f"<span style='color:#0c4e77; font-size:11.5px; font-weight:700;'>{val}&nbsp;</span>"
         )
+        self.lbl_hud_seleccion.ensurePolished()
+        self.hud_seleccion_frame.ensurePolished()
+        self.lbl_hud_seleccion.adjustSize()
+        self.hud_seleccion_frame.adjustSize()
+        self._reposicionar_huds()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.lbl_hud_seleccion.adjustSize()
         self.hud_seleccion_frame.adjustSize()
         self._reposicionar_huds()
 

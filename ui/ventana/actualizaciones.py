@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import QApplication, QMessageBox, QProgressDialog
 from ui.actualizador import (
     TrabajadorConsultaActualizacion,
     TrabajadorDescargaActualizacion,
+    es_paquete_microsoft_store,
     lanzar_actualizacion_silenciosa,
 )
 from ui.constantes import REPOSITORIO_GITHUB, VERSION_APP
@@ -29,9 +30,13 @@ class ActualizacionesMixin:
         self._verificacion_manual_act = False
 
     def _iniciar_verificacion_actualizaciones_silenciosa(self):
+        if es_paquete_microsoft_store():
+            return
         self._iniciar_consulta_actualizacion(manual=False)
 
     def _on_buscar_actualizaciones_clicked(self):
+        if es_paquete_microsoft_store():
+            return
         info = getattr(self, "_actualizacion_disponible", None)
         if info is not None:
             self._preguntar_e_instalar_actualizacion(info)

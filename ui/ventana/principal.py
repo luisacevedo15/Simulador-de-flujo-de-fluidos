@@ -90,9 +90,11 @@ class MainWindow(QMainWindow, ActualizacionesMixin, InterfazMixin, EstilosMixin,
         self._micro_animaciones = MicroAnimaciones(self)
         from ui.ventana.historial import HistorialProyecto
         self.historial = HistorialProyecto(self)
+        from ui.actualizador import es_paquete_microsoft_store
         if not (
             os.environ.get("PYTEST_CURRENT_TEST")
             or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
+            or es_paquete_microsoft_store()
         ):
             QTimer.singleShot(2500, self._iniciar_verificacion_actualizaciones_silenciosa)
 

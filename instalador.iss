@@ -2,7 +2,7 @@
 ; Compila la carpeta generada por PyInstaller (--onedir) en un instalador profesional.
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.1"
+  #define MyAppVersion "1.0.2"
 #endif
 
 #define MyAppName "Simulador de Flujo de Fluidos"

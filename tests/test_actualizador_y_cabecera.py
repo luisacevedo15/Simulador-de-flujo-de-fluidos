@@ -6,19 +6,29 @@ import os
 from pathlib import Path
 
 import pytest
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QApplication, QLabel
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QDesktopServices, QIcon, QImage, QPixmap
+from PyQt5.QtWidgets import QApplication, QLabel, QPushButton
 
 from ui.actualizador import (
     InfoActualizacion,
     consultar_ultima_version,
     descargar_instalador,
+    es_paquete_microsoft_store,
     es_version_mayor,
     parsear_version,
     seleccionar_asset_instalador,
 )
-from ui.constantes import ARCHIVO_ICONO, ARCHIVO_ICONO_PROYECTO, VERSION_APP
+from ui.constantes import (
+    ARCHIVO_ICONO,
+    ARCHIVO_ICONO_PROYECTO,
+    CORREO_SOPORTE,
+    TEXTO_AUTOR,
+    URL_REPOSITORIO_GITHUB,
+    VERSION_APP,
+)
 from ui.recursos import ruta_recurso
+from ui.reporte_errores import DialogoReportarError, enviar_reporte_error
 from ui.ventana.principal import MainWindow
 
 
@@ -37,12 +47,16 @@ class _FakeResponse:
         return False
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def ventana():
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
     app = QApplication.instance() or QApplication([])
     w = MainWindow()
     yield w
+    try:
+        w.canvas_view.scene().selectionChanged.disconnect()
+    except Exception:
+        pass
     w.close()
     w.deleteLater()
     app.processEvents()
@@ -158,3 +172,116 @@ def test_descargar_instalador_valida_pe(tmp_path):
         )
     assert not destino_bad.exists()
     assert not (tmp_path / "Bad.exe.part").exists()
+
+
+def test_deteccion_microsoft_store_oculta_boton_actualizaciones(ventana, monkeypatch):
+    assert es_paquete_microsoft_store(
+        r"C:\Program Files\WindowsApps\Acev.SimuladordeFlujodeFluidos_1.0.1.0_x64__abc\app\Simulador.exe"
+    )
+    assert not es_paquete_microsoft_store(
+        r"C:\Users\USER\AppData\Local\Programs\Simulador de Flujo de Fluidos\Simulador.exe"
+    )
+
+    monkeypatch.setenv("SIMULADOR_MODO_STORE", "1")
+    assert es_paquete_microsoft_store() is True
+    hdr_store = ventana._build_header()
+    try:
+        assert ventana.btn_buscar_actualizacion.isHidden() is True
+    finally:
+        hdr_store.deleteLater()
+
+    monkeypatch.setenv("SIMULADOR_MODO_STORE", "0")
+    assert es_paquete_microsoft_store() is False
+    hdr_gh = ventana._build_header()
+    try:
+        assert ventana.btn_buscar_actualizacion.isHidden() is False
+    finally:
+        hdr_gh.deleteLater()
+
+
+def test_botones_barra_son_qpushbutton_y_sincronizan_conectar(ventana):
+    w = ventana
+    w.show()
+    QApplication.instance().processEvents()
+    for idx, attr in enumerate(("btn_tanque", "btn_union", "btn_conectar", "btn_accesorio", "btn_bomba")):
+        btn = getattr(w, attr)
+        assert isinstance(btn, QPushButton)
+        assert w.main_toolbar.widgetForAction(w.main_toolbar.actions()[idx]) is btn
+        assert not btn.isHidden()
+
+    w.conectar_action.setChecked(True)
+    assert w.btn_conectar.isChecked() is True
+    assert w.canvas_view.scene().modo_conexion is True
+
+    w.btn_conectar.setChecked(False)
+    assert w.conectar_action.isChecked() is False
+    assert w.canvas_view.scene().modo_conexion is False
+
+
+def test_correo_autor_y_botones_inferiores_izquierda(ventana, monkeypatch):
+    w = ventana
+    assert CORREO_SOPORTE == "luis.acevedos@unmsm.edu.pe"
+    assert "luis.acevedos@unmsm.edu.pe" in TEXTO_AUTOR
+    assert "Ninguna" in w.canvas_view.lbl_hud_seleccion.text()
+
+    assert hasattr(w, "btn_reportar_error")
+    assert hasattr(w, "btn_github")
+    assert not w.btn_reportar_error.icon().isNull()
+    assert not w.btn_github.icon().isNull()
+
+    urls_abiertas = []
+    monkeypatch.setattr(QDesktopServices, "openUrl", lambda qurl: urls_abiertas.append(qurl.toString()) or True)
+    w.btn_github.click()
+    assert urls_abiertas == [URL_REPOSITORIO_GITHUB]
+
+
+def test_envio_reporte_error_webhook_y_dialogo(ventana, tmp_path):
+    w = ventana
+    dlg = DialogoReportarError(w)
+    try:
+        assert CORREO_SOPORTE in dlg.lbl_subtitulo.text()
+        pm = QPixmap(120, 80)
+        pm.fill(Qt.white)
+        assert dlg.bandeja_foto.establecer_pixmap(pm, "evidencia.png") is True
+        assert dlg.bandeja_foto.tiene_imagen() is True
+        assert dlg.bandeja_foto.nombre_imagen == "evidencia.png"
+
+        peticiones = []
+
+        def fake_urlopen(req, timeout=0):
+            peticiones.append((req.full_url, req.data, dict(req.header_items())))
+            return _FakeResponse(b'{"ok": true}')
+
+        ok = enviar_reporte_error(
+            "Los botones desaparecían al pasar el mouse",
+            bytes_imagen=dlg.bandeja_foto.bytes_imagen,
+            nombre_imagen=dlg.bandeja_foto.nombre_imagen,
+            contacto="usuario@unmsm.edu.pe",
+            url_webhook="https://script.google.com/macros/s/test/exec",
+            urlopen=fake_urlopen,
+        )
+        assert ok is True
+        assert len(peticiones) == 1
+        url, raw_body, _hdrs = peticiones[0]
+        assert url == "https://script.google.com/macros/s/test/exec"
+        body_json = json.loads(raw_body.decode("utf-8"))
+        assert body_json["destinatario"] == "luis.acevedos@unmsm.edu.pe"
+        assert "desaparecían" in body_json["descripcion"]
+        assert body_json["nombre_imagen"] == "evidencia.png"
+        assert len(body_json["imagen_base64"]) > 20
+
+        # También prueba el canal automático sin webhook externo configurado
+        peticiones.clear()
+        ok_directo = enviar_reporte_error(
+            "Prueba con adjunto multipart",
+            bytes_imagen=dlg.bandeja_foto.bytes_imagen,
+            nombre_imagen="foto.png",
+            url_webhook="",
+            urlopen=fake_urlopen,
+        )
+        assert ok_directo is True
+        assert peticiones[0][0] == f"https://formsubmit.co/{CORREO_SOPORTE}"
+        assert b"foto.png" in peticiones[0][1]
+    finally:
+        dlg.close()
+        dlg.deleteLater()

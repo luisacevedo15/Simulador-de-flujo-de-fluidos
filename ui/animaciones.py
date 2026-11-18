@@ -40,6 +40,8 @@ def transicion(animacion, inicio, fin, duracion=160):
 
 def radio_boton(boton):
     nombre = boton.objectName()
+    if nombre in ("navBtnReport", "navBtnGithub"):
+        return 14.0
     if nombre.startswith("navBtn"):
         return 16.0
     if nombre == "bernoulliButton":
@@ -87,8 +89,7 @@ class _EfectoBoton(QGraphicsEffect):
         painter.translate(centro.x(), centro.y() + dy)
         painter.scale(escala, escala)
         painter.translate(-centro.x(), -centro.y())
-        pixmap, offset = self.sourcePixmap(Qt.LogicalCoordinates, QGraphicsEffect.NoPad)
-        painter.drawPixmap(offset, pixmap)
+        self.drawSource(painter)
         painter.restore()
 
 
@@ -196,7 +197,7 @@ class _RealceBoton(QWidget):
         clip = QPainterPath()
         clip.addRoundedRect(rect, radio, radio)
         p.setClipPath(clip)
-        peligro = self.parentWidget().objectName() == "dangerToolbarBtn"
+        peligro = self.parentWidget().objectName() in ("dangerToolbarBtn", "navBtnReport")
         color = QColor("#ba1a1a" if peligro else "#0284c7")
         primario = self.parentWidget().objectName() in ("bernoulliButton", "navBtnActive")
         if primario:

@@ -79,41 +79,78 @@ class BarraHerramientasMixin:
             toolbar.layout().setContentsMargins(14, 8, 14, 8)
             toolbar.layout().setSpacing(6)
 
-        add_tanque_action = QAction(
-            crear_icono_herramienta("tanque", TEMA_STITCH["primary"]), "Tanque", self
+        self.btn_tanque = QPushButton(
+            crear_icono_herramienta("tanque", TEMA_STITCH["primary"]), "Tanque"
         )
-        add_tanque_action.triggered.connect(self._add_tanque)
-        add_tanque_action.setToolTip("Añadir tanque al lienzo")
-        toolbar.addAction(add_tanque_action)
+        self.btn_tanque.setIconSize(QSize(18, 18))
+        self.btn_tanque.setFixedHeight(36)
+        self.btn_tanque.setCursor(Qt.PointingHandCursor)
+        self.btn_tanque.setToolTip("Añadir tanque al lienzo")
+        self.btn_tanque.clicked.connect(self._add_tanque)
+        toolbar.addWidget(self.btn_tanque)
 
-        add_union_action = QAction(
-            crear_icono_herramienta("union", TEMA_STITCH["primary"]), "Unión", self
+        self.btn_union = QPushButton(
+            crear_icono_herramienta("union", TEMA_STITCH["primary"]), "Unión"
         )
-        add_union_action.triggered.connect(self._add_union)
-        add_union_action.setToolTip("Añadir nodo de unión")
-        toolbar.addAction(add_union_action)
+        self.btn_union.setIconSize(QSize(18, 18))
+        self.btn_union.setFixedHeight(36)
+        self.btn_union.setCursor(Qt.PointingHandCursor)
+        self.btn_union.setToolTip("Añadir nodo de unión")
+        self.btn_union.clicked.connect(self._add_union)
+        toolbar.addWidget(self.btn_union)
 
         self.conectar_action = QAction(
             crear_icono_herramienta("conectar", TEMA_STITCH["secondary"]), "Conectar", self
         )
         self.conectar_action.setCheckable(True)
         self.conectar_action.setToolTip("Conectar tanques, bombas y nodos con una tubería")
-        self.conectar_action.toggled.connect(self._toggle_modo_conexion)
-        toolbar.addAction(self.conectar_action)
 
-        add_accesorio_action = QAction(
-            crear_icono_herramienta("accesorio", TEMA_STITCH["tertiary"]), "Accesorio", self
+        self.btn_conectar = QPushButton(
+            crear_icono_herramienta("conectar", TEMA_STITCH["secondary"]), "Conectar"
         )
-        add_accesorio_action.triggered.connect(self._abrir_catalogo_accesorios)
-        add_accesorio_action.setToolTip("Catálogo de válvulas, reducciones y expansiones")
-        toolbar.addAction(add_accesorio_action)
+        self.btn_conectar.setObjectName("toolbarToggleBtn")
+        self.btn_conectar.setIconSize(QSize(18, 18))
+        self.btn_conectar.setCheckable(True)
+        self.btn_conectar.setFixedHeight(36)
+        self.btn_conectar.setCursor(Qt.PointingHandCursor)
+        self.btn_conectar.setToolTip("Conectar tanques, bombas y nodos con una tubería")
 
-        add_bomba_action = QAction(
-            crear_icono_herramienta("bomba", TEMA_STITCH["primary"]), "Bomba", self
+        def _sync_conectar_desde_accion(activo):
+            if self.btn_conectar.isChecked() != activo:
+                self.btn_conectar.blockSignals(True)
+                self.btn_conectar.setChecked(activo)
+                self.btn_conectar.blockSignals(False)
+            self._toggle_modo_conexion(activo)
+
+        def _sync_conectar_desde_boton(activo):
+            if self.conectar_action.isChecked() != activo:
+                self.conectar_action.setChecked(activo)
+            else:
+                self._toggle_modo_conexion(activo)
+
+        self.conectar_action.toggled.connect(_sync_conectar_desde_accion)
+        self.btn_conectar.toggled.connect(_sync_conectar_desde_boton)
+        toolbar.addWidget(self.btn_conectar)
+
+        self.btn_accesorio = QPushButton(
+            crear_icono_herramienta("accesorio", TEMA_STITCH["tertiary"]), "Accesorio"
         )
-        add_bomba_action.setToolTip(TOOLTIP_BOMBA)
-        add_bomba_action.triggered.connect(self._add_bomba)
-        toolbar.addAction(add_bomba_action)
+        self.btn_accesorio.setIconSize(QSize(18, 18))
+        self.btn_accesorio.setFixedHeight(36)
+        self.btn_accesorio.setCursor(Qt.PointingHandCursor)
+        self.btn_accesorio.setToolTip("Catálogo de válvulas, reducciones y expansiones")
+        self.btn_accesorio.clicked.connect(self._abrir_catalogo_accesorios)
+        toolbar.addWidget(self.btn_accesorio)
+
+        self.btn_bomba = QPushButton(
+            crear_icono_herramienta("bomba", TEMA_STITCH["primary"]), "Bomba"
+        )
+        self.btn_bomba.setIconSize(QSize(18, 18))
+        self.btn_bomba.setFixedHeight(36)
+        self.btn_bomba.setCursor(Qt.PointingHandCursor)
+        self.btn_bomba.setToolTip(TOOLTIP_BOMBA)
+        self.btn_bomba.clicked.connect(self._add_bomba)
+        toolbar.addWidget(self.btn_bomba)
 
         # Menú desplegable para Formas ("Añadir Forma" ajustado siempre al texto completo)
         menu_formas = MenuOpciones(self, 300)
@@ -221,12 +258,6 @@ class BarraHerramientasMixin:
         self.btn_ejemplos.setCursor(Qt.PointingHandCursor)
         self.btn_ejemplos.setMenu(menu_ejemplos)
         toolbar.addWidget(self.btn_ejemplos)
-
-        for accion in (add_tanque_action, add_union_action, self.conectar_action,
-                       add_accesorio_action, add_bomba_action):
-            boton = toolbar.widgetForAction(accion)
-            boton.setFixedHeight(36)
-            boton.setCursor(Qt.PointingHandCursor)
 
         if hasattr(self, "top_bars_layout"):
             self.top_bars_layout.addWidget(toolbar)

@@ -69,10 +69,21 @@ ARCHIVO_ICONO = "logo_1.ico"
 ARCHIVO_ICONO_PROYECTO = "Gota_archivo_para_los_json.ico"
 
 
-VERSION_APP = "1.0.1"
+VERSION_APP = "1.0.2"
 
 
 REPOSITORIO_GITHUB = "luisacevedo15/Simulador-de-flujo-de-fluidos"
+
+
+URL_REPOSITORIO_GITHUB = f"https://github.com/{REPOSITORIO_GITHUB}"
+
+
+CORREO_SOPORTE = "luis.acevedos@unmsm.edu.pe"
+
+
+# URL opcional de Google Apps Script (Web App) para envío directo con adjunto.
+# Si está vacía, el sistema usa el canal automático de respaldo hacia CORREO_SOPORTE.
+URL_WEBHOOK_REPORTE = "https://script.google.com/macros/s/AKfycbx9zC1GEIT5qdgybRwo9Jz1PsAX0nLcaLrgM0I0eV9eOUlXcodAbc9OoRs1O5mHYD9uJQ/exec"
 
 
 APP_USER_MODEL_ID = "luisacevedo15.SimuladorFlujoDeFluidos.App"
@@ -93,7 +104,7 @@ ARCHIVOS_ESCUDO = ("logo_3.png",)
 ARCHIVO_LOGO_PROPIO = "logo_2.jpg"
 
 
-TEXTO_AUTOR = "Autor: Luis Acevedo Suarez | luisacevedos@unmsm.edu.pe"
+TEXTO_AUTOR = f"Autor: Luis Acevedo Suarez | {CORREO_SOPORTE}"
 
 
 # -------------------------------------------------------------

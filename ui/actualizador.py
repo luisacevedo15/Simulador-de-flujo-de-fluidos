@@ -15,6 +15,37 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal
 from ui.constantes import REPOSITORIO_GITHUB, VERSION_APP
 
 
+APPMODEL_ERROR_NO_PACKAGE = 15700
+ERROR_INSUFFICIENT_BUFFER = 122
+
+
+def es_paquete_microsoft_store(ejecutable=None):
+    """Detecta si el proceso se ejecuta dentro de un contenedor MSIX / Microsoft Store."""
+    override = os.environ.get("SIMULADOR_MODO_STORE", "").strip().lower()
+    if override in ("1", "true", "si"):
+        return True
+    if override in ("0", "false", "no"):
+        return False
+
+    ruta_exe = os.path.abspath(ejecutable or sys.executable or "").lower()
+    if "windowsapps" in ruta_exe.replace("/", "\\").split("\\"):
+        return True
+
+    if sys.platform == "win32" and ejecutable is None:
+        try:
+            import ctypes
+
+            largo = ctypes.c_uint32(0)
+            rc = ctypes.windll.kernel32.GetCurrentPackageFullName(ctypes.byref(largo), None)
+            if rc in (0, ERROR_INSUFFICIENT_BUFFER) and largo.value > 0:
+                return True
+            if rc == APPMODEL_ERROR_NO_PACKAGE:
+                return False
+        except Exception:
+            pass
+    return False
+
+
 @dataclass(frozen=True)
 class InfoActualizacion:
     """Metadatos de una versión consultada en GitHub Releases."""

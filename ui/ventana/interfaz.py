@@ -1,7 +1,7 @@
 """Construcción de los widgets: cabecera, paneles, lienzo y barra."""
 
-from PyQt5.QtCore import QPointF, QSize, Qt
-from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen, QPixmap, QPolygonF
+from PyQt5.QtCore import QPointF, QSize, QUrl, Qt
+from PyQt5.QtGui import QColor, QDesktopServices, QFont, QFontMetrics, QPainter, QPen, QPixmap, QPolygonF
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -24,8 +24,9 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from ui.actualizador import es_paquete_microsoft_store
 from ui.escena import CanvasView, GridScene
-from ui.constantes import TEMA_STITCH, VERSION_APP
+from ui.constantes import CORREO_SOPORTE, TEMA_STITCH, URL_REPOSITORIO_GITHUB, VERSION_APP
 from ui.perfil_egl import WidgetPerfilEGLHGL
 from ui.grafico_bombas import (
     WidgetGraficoBombas,
@@ -65,6 +66,8 @@ class InterfazMixin:
         self.btn_buscar_actualizacion.setCursor(Qt.PointingHandCursor)
         self.btn_buscar_actualizacion.setToolTip("Comprobar si hay una nueva versión en GitHub")
         self.btn_buscar_actualizacion.clicked.connect(self._on_buscar_actualizaciones_clicked)
+        if es_paquete_microsoft_store():
+            self.btn_buscar_actualizacion.hide()
         h_layout.addWidget(self.btn_buscar_actualizacion, 0, Qt.AlignVCenter)
 
         h_layout.addStretch()
@@ -117,6 +120,17 @@ class InterfazMixin:
         guia.show()
         guia.raise_()
         guia.activateWindow()
+
+    def _abrir_repositorio_github(self):
+        """Abre el repositorio oficial del proyecto en GitHub."""
+        QDesktopServices.openUrl(QUrl(URL_REPOSITORIO_GITHUB))
+
+    def _abrir_dialogo_reportar_error(self):
+        """Muestra el diálogo para enviar un reporte de error con descripción y foto."""
+        from ui.reporte_errores import DialogoReportarError
+
+        dialogo = DialogoReportarError(self)
+        dialogo.exec_()
 
     def _on_trazado_global_cambiado(self, texto):
         modo = "ortogonal" if "ortogonal" in str(texto).lower() else "recto"
@@ -215,6 +229,40 @@ class InterfazMixin:
         self.btn_nav_curvas.clicked.connect(lambda: self._cambiar_vista_central("curvas"))
         nav_layout.addWidget(self.btn_nav_curvas, 0, Qt.AlignHCenter)
         nav_layout.addStretch()
+
+        sep_nav_inf = QFrame()
+        sep_nav_inf.setFrameShape(QFrame.HLine)
+        sep_nav_inf.setFixedSize(42, 1)
+        sep_nav_inf.setStyleSheet("background-color: #e2e8f0; border: none;")
+        nav_layout.addWidget(sep_nav_inf, 0, Qt.AlignHCenter)
+
+        # Botón superior de la esquina inferior izquierda: Reportar un error
+        self.btn_reportar_error = QToolButton()
+        self.btn_reportar_error.setObjectName("navBtnReport")
+        self.btn_reportar_error.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        self.btn_reportar_error.setIcon(crear_icono_herramienta("reportar_error", "#b42332"))
+        self.btn_reportar_error.setIconSize(QSize(20, 20))
+        self.btn_reportar_error.setText("ERROR")
+        self.btn_reportar_error.setFixedSize(58, 50)
+        self.btn_reportar_error.setCursor(Qt.PointingHandCursor)
+        self.btn_reportar_error.setToolTip(
+            f"Reportar un error con descripción y foto ({CORREO_SOPORTE})"
+        )
+        self.btn_reportar_error.clicked.connect(self._abrir_dialogo_reportar_error)
+        nav_layout.addWidget(self.btn_reportar_error, 0, Qt.AlignHCenter)
+
+        # Botón inferior izquierdo: Redirigir a GitHub con su logo
+        self.btn_github = QToolButton()
+        self.btn_github.setObjectName("navBtnGithub")
+        self.btn_github.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        self.btn_github.setIcon(crear_icono_herramienta("github", "#0f172a"))
+        self.btn_github.setIconSize(QSize(21, 21))
+        self.btn_github.setText("GITHUB")
+        self.btn_github.setFixedSize(58, 50)
+        self.btn_github.setCursor(Qt.PointingHandCursor)
+        self.btn_github.setToolTip(f"Abrir repositorio en GitHub ({URL_REPOSITORIO_GITHUB})")
+        self.btn_github.clicked.connect(self._abrir_repositorio_github)
+        nav_layout.addWidget(self.btn_github, 0, Qt.AlignHCenter)
 
         self.indicador_nav = IndicadorNavegacion(nav_bar)
 

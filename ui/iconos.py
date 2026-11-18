@@ -269,6 +269,68 @@ def crear_icono_herramienta(tipo, color_hex="#0c4e77"):
     elif tipo == "trazo_discontinuo":
         p.setPen(QPen(c, 2.8, Qt.DashLine, Qt.RoundCap))
         p.drawLine(QPointF(2.5, 12.0), QPointF(21.5, 12.0))
+    elif tipo == "github":
+        # Logo oficial de GitHub (Octocat en círculo recortado)
+        outer = QPainterPath()
+        outer.addEllipse(QPointF(12.0, 12.0), 9.6, 9.6)
+
+        cat = QPainterPath()
+        # Cabeza + orejas puntiagudas + torso inferior
+        cat.moveTo(9.8, 21.8)
+        cat.lineTo(9.8, 17.6)
+        # Cola hacia la izquierda
+        cat.cubicTo(7.2, 18.2, 6.5, 16.5, 6.0, 15.6)
+        cat.cubicTo(5.6, 14.9, 5.0, 14.5, 4.6, 14.4)
+        cat.cubicTo(4.3, 14.2, 4.5, 13.8, 5.1, 13.9)
+        cat.cubicTo(5.9, 14.1, 6.5, 14.8, 6.9, 15.5)
+        cat.cubicTo(7.6, 16.6, 8.8, 16.3, 9.9, 15.9)
+        cat.cubicTo(10.0, 15.1, 10.4, 14.5, 10.9, 14.2)
+        # Mejilla izquierda -> oreja izquierda
+        cat.cubicTo(7.9, 13.8, 6.2, 12.6, 6.2, 9.8)
+        cat.cubicTo(6.2, 8.7, 6.6, 7.8, 7.3, 7.0)
+        cat.cubicTo(7.0, 6.1, 7.0, 4.9, 7.5, 4.1)
+        cat.cubicTo(8.4, 4.1, 9.4, 4.7, 10.1, 5.3)
+        cat.cubicTo(11.3, 5.0, 12.7, 5.0, 13.9, 5.3)
+        # Oreja derecha -> mejilla derecha
+        cat.cubicTo(14.6, 4.7, 15.6, 4.1, 16.5, 4.1)
+        cat.cubicTo(17.0, 4.9, 17.0, 6.1, 16.7, 7.0)
+        cat.cubicTo(17.4, 7.8, 17.8, 8.7, 17.8, 9.8)
+        cat.cubicTo(17.8, 12.6, 16.1, 13.8, 13.1, 14.2)
+        cat.cubicTo(13.7, 14.7, 14.2, 15.5, 14.2, 16.8)
+        cat.lineTo(14.2, 21.8)
+        cat.closeSubpath()
+
+        logo_path = outer.subtracted(cat)
+        p.setPen(Qt.NoPen)
+        p.setBrush(c)
+        p.drawPath(logo_path)
+    elif tipo == "reportar_error":
+        # Icono de reporte de bug / incidencia técnica
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(c, 1.85, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        # Cabeza y antenas
+        p.drawArc(QRectF(9.0, 4.2, 6.0, 5.0), 0, 180 * 16)
+        p.drawLine(QPointF(9.5, 5.2), QPointF(7.6, 3.5))
+        p.drawLine(QPointF(14.5, 5.2), QPointF(16.4, 3.5))
+        # Cuerpo ovalado del bug
+        p.drawRoundedRect(QRectF(7.5, 7.2, 9.0, 11.5), 4.5, 4.5)
+        p.drawLine(QPointF(12.0, 10.2), QPointF(12.0, 18.2))
+        p.drawLine(QPointF(7.8, 10.2), QPointF(16.2, 10.2))
+        # Patas laterales
+        for y_pata in (9.5, 13.0, 16.3):
+            p.drawLine(QPointF(4.3, y_pata), QPointF(7.4, y_pata))
+            p.drawLine(QPointF(16.6, y_pata), QPointF(19.7, y_pata))
+    elif tipo == "imagen":
+        p.setBrush(Qt.NoBrush)
+        p.drawRoundedRect(QRectF(3.5, 5.0, 17.0, 14.0), 2.5, 2.5)
+        p.drawEllipse(QPointF(8.5, 9.5), 1.6, 1.6)
+        ruta_montana = QPainterPath()
+        ruta_montana.moveTo(4.5, 17.5)
+        ruta_montana.lineTo(9.5, 12.8)
+        ruta_montana.lineTo(13.0, 15.8)
+        ruta_montana.lineTo(16.0, 12.2)
+        ruta_montana.lineTo(19.5, 17.5)
+        p.drawPath(ruta_montana)
 
     p.end()
     return QtGui.QIcon(pm)
