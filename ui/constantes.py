@@ -69,7 +69,7 @@ ARCHIVO_ICONO = "logo_1.ico"
 ARCHIVO_ICONO_PROYECTO = "Gota_archivo_para_los_json.ico"
 
 
-VERSION_APP = "1.0.2"
+VERSION_APP = "1.0.3"
 
 
 REPOSITORIO_GITHUB = "luisacevedo15/Simulador-de-flujo-de-fluidos"

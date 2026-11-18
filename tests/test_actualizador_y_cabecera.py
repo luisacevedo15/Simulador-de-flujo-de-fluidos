@@ -12,12 +12,18 @@ from PyQt5.QtWidgets import QApplication, QLabel, QPushButton
 
 from ui.actualizador import (
     InfoActualizacion,
+    TrabajadorAutoActualizacion,
+    calcular_sha256_archivo,
     consultar_ultima_version,
     descargar_instalador,
+    descargar_y_verificar_actualizacion,
     es_paquete_microsoft_store,
     es_version_mayor,
+    extraer_hash_sha256,
     parsear_version,
     seleccionar_asset_instalador,
+    seleccionar_asset_sha256,
+    verificar_sha256_instalador,
 )
 from ui.constantes import (
     ARCHIVO_ICONO,
@@ -82,7 +88,7 @@ def test_cabecera_sin_titulo_duplicado_y_con_version(ventana):
     )
     w._verificacion_manual_act = False
     w._on_resultado_actualizacion(info, "")
-    assert w.btn_buscar_actualizacion.text() == "Actualizar a v9.9.9"
+    assert w.btn_buscar_actualizacion.text() == "Actualizando a v9.9.9…"
     assert w.btn_buscar_actualizacion.property("updateAvailable") == "true"
 
 
@@ -172,6 +178,95 @@ def test_descargar_instalador_valida_pe(tmp_path):
         )
     assert not destino_bad.exists()
     assert not (tmp_path / "Bad.exe.part").exists()
+
+
+def test_verificacion_sha256_y_aborto_si_falta_o_no_coincide(tmp_path):
+    import hashlib
+
+    contenido = b"MZ" + b"binario_instalador_v2" * 64
+    hash_real = hashlib.sha256(contenido).hexdigest().lower()
+    texto_sha = f"{hash_real}  Simulador_Flujo_de_Fluidos_Setup.exe\n"
+
+    assert extraer_hash_sha256(texto_sha, "Simulador_Flujo_de_Fluidos_Setup.exe") == hash_real
+    assert extraer_hash_sha256("no_es_un_hash") is None
+
+    release = {
+        "assets": [
+            {
+                "name": "Simulador_Flujo_de_Fluidos_Setup.exe",
+                "browser_download_url": "https://example.com/Setup.exe",
+                "size": len(contenido),
+            },
+            {
+                "name": "Simulador_Flujo_de_Fluidos_Setup.exe.sha256",
+                "browser_download_url": "https://example.com/Setup.exe.sha256",
+                "size": len(texto_sha),
+            },
+        ]
+    }
+    asset_sha = seleccionar_asset_sha256(release, "Simulador_Flujo_de_Fluidos_Setup.exe")
+    assert asset_sha is not None
+    assert asset_sha["name"] == "Simulador_Flujo_de_Fluidos_Setup.exe.sha256"
+
+    # 1. Caso exitoso: descarga .exe y verifica contra .sha256
+    info_ok = InfoActualizacion(
+        version_remota="2.0.0",
+        url_release="https://example.com/release",
+        notas="",
+        nombre_asset="Simulador_Flujo_de_Fluidos_Setup.exe",
+        url_descarga="https://example.com/Setup.exe",
+        tamano_bytes=len(contenido),
+        nombre_sha256="Simulador_Flujo_de_Fluidos_Setup.exe.sha256",
+        url_sha256="https://example.com/Setup.exe.sha256",
+    )
+
+    def router_ok(req, timeout=0):
+        if req.full_url.endswith(".sha256"):
+            return _FakeResponse(texto_sha.encode("utf-8"))
+        return _FakeResponse(contenido, {"Content-Length": str(len(contenido))})
+
+    ruta_ok = descargar_y_verificar_actualizacion(info_ok, str(tmp_path), urlopen=router_ok)
+    assert Path(ruta_ok).exists()
+    assert calcular_sha256_archivo(ruta_ok) == hash_real
+
+    # 2. Caso hash corrupto: debe borrar el .exe y abortar
+    def router_bad_hash(req, timeout=0):
+        if req.full_url.endswith(".sha256"):
+            return _FakeResponse(("0" * 64 + "  Simulador_Flujo_de_Fluidos_Setup.exe").encode("utf-8"))
+        return _FakeResponse(contenido, {"Content-Length": str(len(contenido))})
+
+    carpeta_bad = tmp_path / "bad_hash"
+    with pytest.raises(ValueError, match="SHA256"):
+        descargar_y_verificar_actualizacion(info_ok, str(carpeta_bad), urlopen=router_bad_hash)
+    assert not (carpeta_bad / "Simulador_Flujo_de_Fluidos_Setup.exe").exists()
+    assert not (carpeta_bad / "Simulador_Flujo_de_Fluidos_Setup.exe.part").exists()
+
+    # 3. Caso sin archivo .sha256 en el release: aborta sin descargar
+    info_sin_sha = InfoActualizacion(
+        version_remota="2.0.0",
+        url_release="https://example.com/release",
+        notas="",
+        nombre_asset="Simulador_Flujo_de_Fluidos_Setup.exe",
+        url_descarga="https://example.com/Setup.exe",
+        tamano_bytes=len(contenido),
+        nombre_sha256="",
+        url_sha256="",
+    )
+    carpeta_sin_sha = tmp_path / "sin_sha"
+    with pytest.raises(ValueError, match=".sha256"):
+        descargar_y_verificar_actualizacion(info_sin_sha, str(carpeta_sin_sha), urlopen=router_ok)
+    assert not carpeta_sin_sha.exists()
+
+    # 4. TrabajadorAutoActualizacion captura fallos silenciosamente
+    fallos = []
+    trabajador = TrabajadorAutoActualizacion(
+        version_actual="1.0.0",
+        directorio_destino=str(tmp_path / "worker_fail"),
+        urlopen=lambda *_a, **_kw: (_ for _ in ()).throw(OSError("Sin internet")),
+    )
+    trabajador.fallo_silencioso.connect(fallos.append)
+    trabajador.ejecutar()
+    assert len(fallos) == 1
 
 
 def test_deteccion_microsoft_store_oculta_boton_actualizaciones(ventana, monkeypatch):

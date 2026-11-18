@@ -1,8 +1,9 @@
 ; Script de Inno Setup 6 para Simulador de Flujo de Fluidos
-; Compila la carpeta generada por PyInstaller (--onedir) en un instalador profesional.
+; Compila la carpeta generada por PyInstaller (--onedir) en un instalador auto-actualizable.
+; La versión proviene de un único lugar (VERSION_APP en ui/constantes.py) y se recibe por /DMyAppVersion=...
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.2"
+  #error "Debes indicar la versión con /DMyAppVersion=X.Y.Z (leída desde ui.constantes.VERSION_APP)"
 #endif
 
 #define MyAppName "Simulador de Flujo de Fluidos"
@@ -22,7 +23,7 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-DefaultDirName={autopf}\{#MyAppName}
+DefaultDirName={localappdata}\Programs\{#MyAppName}
 DisableProgramGroupPage=yes
 LicenseFile=LICENSE
 OutputDir=dist\installer
@@ -36,7 +37,8 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 ChangesAssociations=yes
 CloseApplications=yes
-RestartApplications=yes
+CloseApplicationsFilter=*.exe,*.dll,*.pyd
+RestartApplications=no
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
@@ -64,4 +66,4 @@ Root: HKA; Subkey: "Software\Classes\{#MyAppAssocProgId}\DefaultIcon"; ValueType
 Root: HKA; Subkey: "Software\Classes\{#MyAppAssocProgId}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall
